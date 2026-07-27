@@ -57,7 +57,6 @@
     <script src="bootstrap.js"></script>
 
     <style>
-        /* === ORIGINELE STYLES === */
         * {
             margin: 0;
             padding: 0;
@@ -185,7 +184,7 @@
             margin-top: 22px;
         }
 
-        /* === BCLIENT STYLES === */
+        /* BCLIENT STYLES */
         #bclient-overlay {
             position: fixed;
             inset: 0;
@@ -394,24 +393,32 @@
 
         .marker {
             position: fixed;
-            pointer-events: none;
+            pointer-events: auto;
             z-index: 25;
             border: 2px solid transparent;
             border-radius: 4px;
-            transition: 0.1s;
+            touch-action: none;
+            cursor: grab;
+            min-width: 20px;
+            min-height: 20px;
+            transform: translate(-50%, -50%);
+        }
+        .marker:active {
+            cursor: grabbing;
         }
         .marker.green {
             border-color: #4caf50;
-            background: rgba(76, 175, 80, 0.20);
+            background: rgba(76, 175, 80, 0.25);
             box-shadow: 0 0 16px #4caf5088;
+            width: 6%;
+            height: 4%;
         }
         .marker.orange {
             border-color: #ff9800;
-            background: rgba(255, 152, 0, 0.15);
+            background: rgba(255, 152, 0, 0.20);
             box-shadow: 0 0 20px #ff980066;
             width: 8%;
             height: 8%;
-            transform: translate(-50%, -50%);
         }
         .marker .dot {
             position: absolute;
@@ -429,6 +436,24 @@
             height: 14px;
             background: #ab47bc;
             box-shadow: 0 0 24px #ab47bccc;
+        }
+        #marker-red, #marker-purple {
+            width: 20px;
+            height: 20px;
+            background: transparent;
+            border: none;
+            pointer-events: auto;
+            cursor: grab;
+            transform: translate(-50%, -50%);
+        }
+        #marker-red .dot, #marker-purple .dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #marker-red:active, #marker-purple:active {
+            cursor: grabbing;
         }
 
         #password-area {
@@ -514,11 +539,24 @@
             background: #555;
             border-radius: 4px;
         }
+
+        .marker-label {
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            background: rgba(0,0,0,0.7);
+            padding: 1px 6px;
+            border-radius: 8px;
+            color: #ddd;
+            white-space: nowrap;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
 
-    <!-- ORIGINELE CLIENT ELEMENTEN -->
     <div id="game_frame"></div>
     <div class="bg-overlay"></div>
 
@@ -539,7 +577,6 @@
         <button id="reload-btn" onclick="location.reload()">Try Again</button>
     </div>
 
-    <!-- BCLIENT ELEMENTEN -->
     <div id="bclient-overlay"></div>
 
     <div id="status-bar">
@@ -564,10 +601,20 @@
         </div>
     </div>
 
-    <div class="marker green" id="marker-green" style="display:none;"></div>
-    <div class="marker orange" id="marker-orange" style="display:none;"></div>
-    <div class="marker" id="marker-red" style="display:none;"><div class="dot red"></div></div>
-    <div class="marker" id="marker-purple" style="display:none;"><div class="dot purple"></div></div>
+    <div class="marker green" id="marker-green" style="display:none; left:45%; top:45%;">
+        <span class="marker-label">Server List</span>
+    </div>
+    <div class="marker orange" id="marker-orange" style="display:none; left:45%; top:45%;">
+        <span class="marker-label">Disconnect Area</span>
+    </div>
+    <div class="marker" id="marker-red" style="display:none; left:50%; top:50%;">
+        <div class="dot red"></div>
+        <span class="marker-label" style="top:-22px;">Disconnect</span>
+    </div>
+    <div class="marker" id="marker-purple" style="display:none; left:50%; top:50%;">
+        <div class="dot purple"></div>
+        <span class="marker-label" style="top:-22px;">Survival Item</span>
+    </div>
 
     <div id="password-area">
         <label for="pass-input">🔑</label>
@@ -576,7 +623,7 @@
         <button id="stop-bot-btn">⏹ Stop</button>
     </div>
 
-    <!-- ORIGINELE CLIENT SCRIPT (volledig intact) -->
+    <!-- ORIGINELE CLIENT SCRIPT -->
     <script>
         "use strict";
         (function () {
@@ -689,6 +736,7 @@
             let botRunning = false;
             let botStopRequested = false;
 
+            // LOG
             function log(msg) {
                 const time = new Date().toLocaleTimeString();
                 const div = document.createElement('div');
@@ -752,10 +800,30 @@
                 const defaultPos = { x: 45, y: 45 };
                 const defaultDot = { x: 50, y: 50 };
                 switch(step) {
-                    case 1: selectionState.serverListPos = { ...defaultPos }; break;
-                    case 2: selectionState.disconnectAreaPos = { ...defaultPos }; break;
-                    case 3: selectionState.disconnectBtnPos = { ...defaultDot }; break;
-                    case 4: selectionState.survivalItemPos = { ...defaultDot }; break;
+                    case 1: 
+                        selectionState.serverListPos = { ...defaultPos }; 
+                        markerGreen.style.left = '45%';
+                        markerGreen.style.top = '45%';
+                        markerGreen.style.display = 'block';
+                        break;
+                    case 2: 
+                        selectionState.disconnectAreaPos = { ...defaultPos };
+                        markerOrange.style.left = '45%';
+                        markerOrange.style.top = '45%';
+                        markerOrange.style.display = 'block';
+                        break;
+                    case 3: 
+                        selectionState.disconnectBtnPos = { ...defaultDot };
+                        markerRed.style.left = '50%';
+                        markerRed.style.top = '50%';
+                        markerRed.style.display = 'block';
+                        break;
+                    case 4: 
+                        selectionState.survivalItemPos = { ...defaultDot };
+                        markerPurple.style.left = '50%';
+                        markerPurple.style.top = '50%';
+                        markerPurple.style.display = 'block';
+                        break;
                 }
                 log(`Stap ${step} overgeslagen (default positie)`);
                 advanceAfterStep(step);
@@ -786,10 +854,7 @@
                         selectionState.serverListPos = { x, y };
                         markerGreen.style.left = x + '%';
                         markerGreen.style.top = y + '%';
-                        markerGreen.style.width = '6%';
-                        markerGreen.style.height = '4%';
                         markerGreen.style.display = 'block';
-                        markerGreen.style.transform = 'translate(-50%, -50%)';
                         log(`📌 Server List op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
                         break;
                     case 2:
@@ -816,13 +881,105 @@
                 }
                 waitingForClick = false;
                 hidePopup();
-                setStatus(`✅ Stap ${step} vastgelegd`);
+                setStatus(`✅ Stap ${step} vastgelegd (sleepbaar)`);
+                checkCompletion();
                 setTimeout(() => {
                     if (!isSelecting && !waitingForClick) {
                         advanceAfterStep(step);
                     }
                 }, 300);
             }
+
+            function checkCompletion() {
+                if (selectionState.serverListPos && selectionState.disconnectAreaPos &&
+                    selectionState.disconnectBtnPos && selectionState.survivalItemPos) {
+                    selectionState.completed = true;
+                    startBotBtn.disabled = false;
+                    setStatus('✅ Selectie compleet! Start de bot.');
+                    log('✅ Alle markers zijn gezet');
+                }
+            }
+
+            // ---- SLEEPFUNCTIE ----
+            function makeDraggable(el) {
+                let isDragging = false;
+                let startX, startY, startLeftPct, startTopPct;
+
+                const onStart = (e) => {
+                    if (e.button !== undefined && e.button !== 0) return;
+                    const touch = e.touches ? e.touches[0] : null;
+                    if (touch) {
+                        startX = touch.clientX;
+                        startY = touch.clientY;
+                    } else {
+                        startX = e.clientX;
+                        startY = e.clientY;
+                    }
+                    const leftPct = parseFloat(el.style.left) || 0;
+                    const topPct = parseFloat(el.style.top) || 0;
+                    startLeftPct = leftPct;
+                    startTopPct = topPct;
+                    isDragging = true;
+                    el.style.cursor = 'grabbing';
+                    e.preventDefault();
+                };
+
+                const onMoveFn = (e) => {
+                    if (!isDragging) return;
+                    const touch = e.touches ? e.touches[0] : null;
+                    let clientX, clientY;
+                    if (touch) {
+                        clientX = touch.clientX;
+                        clientY = touch.clientY;
+                    } else {
+                        clientX = e.clientX;
+                        clientY = e.clientY;
+                    }
+                    const dx = clientX - startX;
+                    const dy = clientY - startY;
+                    const winW = window.innerWidth;
+                    const winH = window.innerHeight;
+                    let newLeftPct = startLeftPct + (dx / winW) * 100;
+                    let newTopPct = startTopPct + (dy / winH) * 100;
+                    newLeftPct = Math.max(0, Math.min(100, newLeftPct));
+                    newTopPct = Math.max(0, Math.min(100, newTopPct));
+                    
+                    el.style.left = newLeftPct + '%';
+                    el.style.top = newTopPct + '%';
+                    
+                    const id = el.id;
+                    let pos = { x: newLeftPct, y: newTopPct };
+                    switch(id) {
+                        case 'marker-green': selectionState.serverListPos = pos; break;
+                        case 'marker-orange': selectionState.disconnectAreaPos = pos; break;
+                        case 'marker-red': selectionState.disconnectBtnPos = pos; break;
+                        case 'marker-purple': selectionState.survivalItemPos = pos; break;
+                    }
+                    
+                    checkCompletion();
+                    e.preventDefault();
+                };
+
+                const onEnd = () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        el.style.cursor = 'grab';
+                    }
+                };
+
+                el.addEventListener('mousedown', onStart);
+                el.addEventListener('touchstart', onStart, { passive: false });
+                document.addEventListener('mousemove', onMoveFn);
+                document.addEventListener('touchmove', onMoveFn, { passive: false });
+                document.addEventListener('mouseup', onEnd);
+                document.addEventListener('touchend', onEnd);
+                el.style.cursor = 'grab';
+            }
+
+            makeDraggable(markerGreen);
+            makeDraggable(markerOrange);
+            makeDraggable(markerRed);
+            makeDraggable(markerPurple);
 
             // Event listeners
             startSelectieBtn.addEventListener('click', startSelection);
@@ -868,7 +1025,12 @@
 
             // ---- BOT LOGIC ----
             function dispatchMouseEvent(type, x, y, button=0) {
-                const el = document.elementFromPoint(x, y) || overlay;
+                // Stuur event naar het canvas element
+                const canvas = document.querySelector('#game_frame canvas');
+                if (!canvas) {
+                    log('⚠️ Canvas niet gevonden!');
+                    return;
+                }
                 const ev = new MouseEvent(type, {
                     clientX: x, clientY: y,
                     button: button,
@@ -876,7 +1038,7 @@
                     cancelable: true,
                     view: window
                 });
-                el.dispatchEvent(ev);
+                canvas.dispatchEvent(ev);
             }
 
             function dispatchKeyEvent(type, key, code='') {
@@ -890,19 +1052,17 @@
                 document.dispatchEvent(ev);
             }
 
-            // Type een string karakter voor karakter zoals een echte speler
             async function typeString(text, delayBetween=50) {
                 for (const char of text) {
                     if (botStopRequested) break;
-                    // Voor speciale karakters zoals '/' gebruiken we de juiste code
                     let code = 'Key' + char.toUpperCase();
                     if (char === '/') code = 'Slash';
                     else if (char === ' ') code = 'Space';
                     else if (char === '.') code = 'Period';
-                    else if (char === '@') code = 'Digit2'; // Shift+2
-                    else if (char === '#') code = 'Digit3'; // Shift+3
-                    else if (char === '!') code = 'Digit1'; // Shift+1
-                    else if (char === '?') code = 'Slash'; // Shift+/
+                    else if (char === '@') code = 'Digit2';
+                    else if (char === '#') code = 'Digit3';
+                    else if (char === '!') code = 'Digit1';
+                    else if (char === '?') code = 'Slash';
                     
                     dispatchKeyEvent('keydown', char, code);
                     dispatchKeyEvent('keyup', char, code);
@@ -912,18 +1072,13 @@
 
             function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-            function getPos(sel) {
+            function getPixelPos(sel) {
                 if (!sel) return null;
                 const rect = overlay.getBoundingClientRect();
                 return {
                     x: rect.left + (sel.x / 100) * rect.width,
                     y: rect.top + (sel.y / 100) * rect.height
                 };
-            }
-
-            function pixelMatch(area, threshold) {
-                // Simulatie: 80% kans op match voor demo
-                return Math.random() > 0.2;
             }
 
             async function botLoop() {
@@ -939,53 +1094,52 @@
                         // 1. Dubbelklik op server list
                         const sl = selectionState.serverListPos;
                         if (sl) {
-                            const pos = getPos(sl);
+                            const pos = getPixelPos(sl);
                             if (pos) {
+                                log(`📡 Dubbelklik op server list (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
                                 await sleep(100);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                log('📡 Dubbelklik op server list');
                             }
                         }
                         await sleep(5000);
 
-                        // 2. T indrukken (chat openen)
+                        // 2. T indrukken
                         dispatchKeyEvent('keydown', 't', 'KeyT');
                         dispatchKeyEvent('keyup', 't', 'KeyT');
-                        log('⌨️ T ingedrukt (chat openen)');
+                        log('⌨️ T ingedrukt');
                         await sleep(1000);
 
-                        // 3. Type /login <pass> zoals een echte speler
+                        // 3. Type /login
                         const pass = passInput.value || '<pass>';
                         const cmd = '/login ' + pass;
                         log(`⌨️ Typen: ${cmd}`);
-                        await typeString(cmd, 30); // 30ms tussen elke toets
-                        log(`✅ ${cmd} getypt`);
+                        await typeString(cmd, 30);
                         await sleep(500);
 
                         // 4. Enter
                         dispatchKeyEvent('keydown', 'Enter', 'Enter');
                         dispatchKeyEvent('keyup', 'Enter', 'Enter');
-                        log('⏎ Enter (verstuur commando)');
+                        log('⏎ Enter');
                         await sleep(30000 + Math.floor(Math.random() * 5000));
 
-                        // 5. Rechtsklik op survival item
+                        // 5. Rechtsklik
                         const si = selectionState.survivalItemPos;
                         if (si) {
-                            const pos = getPos(si);
+                            const pos = getPixelPos(si);
                             if (pos) {
+                                log(`🖱️ Rechtsklik (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 2);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 2);
-                                log('🖱️ Rechtsklik op survival item');
                             }
                         }
                         await sleep(5000);
 
-                        // 6. Wacht 10-15 min
-                        const waitTime = 600000 + Math.floor(Math.random() * 300000);
-                        log(`⏳ Wacht ${(waitTime/60000).toFixed(1)} min`);
+                        // 6. Wacht
+                        const waitTime = 30000 + Math.floor(Math.random() * 30000);
+                        log(`⏳ Wacht ${(waitTime/1000).toFixed(0)}s`);
                         await sleep(waitTime);
 
                         // 7. Escape
@@ -994,42 +1148,21 @@
                         log('⎋ Escape');
                         await sleep(3000);
 
-                        // 8. Klik disconnect
+                        // 8. Disconnect
                         const db = selectionState.disconnectBtnPos;
                         if (db) {
-                            const pos = getPos(db);
+                            const pos = getPixelPos(db);
                             if (pos) {
+                                log(`🔴 Disconnect (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                log('🔴 Klik disconnect');
                             }
-                        }
-                        await sleep(3000);
-
-                        // 9. Check disconnect area
-                        const area = selectionState.disconnectAreaPos;
-                        let visible = false;
-                        if (area) {
-                            visible = pixelMatch(area, 0.7);
-                        }
-                        if (visible) {
-                            log('🔄 Disconnect nog zichtbaar, nogmaals klik');
-                            if (db) {
-                                const pos = getPos(db);
-                                if (pos) {
-                                    dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                                    dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                }
-                            }
-                            await sleep(3000);
-                        } else {
-                            log('✅ Disconnect niet zichtbaar, ga door');
                         }
                         await sleep(3000);
 
                         if (botStopRequested) break;
                     } catch (err) {
-                        log('❌ Fout in bot loop: ' + err.message);
+                        log('❌ Fout: ' + err.message);
                         await sleep(5000);
                     }
                 }
@@ -1054,8 +1187,9 @@
                 log('⏳ Stop aangevraagd...');
             });
 
+            checkCompletion();
             log('🟢 BClient geladen');
-            setStatus('🔹 Klik op "Start Selectie" om te beginnen');
+            setStatus('🔹 Klik op "Start Selectie" of sleep markers');
         })();
     </script>
 
