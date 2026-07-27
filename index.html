@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
     <link rel="icon" type="image/svg+xml" href="./game-assets/favicon.svg">
-    <title>HRN Client</title>
+    <title>HRN Client • BClient</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
@@ -57,6 +57,7 @@
     <script src="bootstrap.js"></script>
 
     <style>
+        /* === ORIGINELE STYLES === */
         * {
             margin: 0;
             padding: 0;
@@ -183,12 +184,342 @@
             cursor: pointer;
             margin-top: 22px;
         }
+
+        /* === BCLIENT STYLES === */
+        #bclient-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            pointer-events: none;
+        }
+        #bclient-overlay.active {
+            pointer-events: auto;
+        }
+
+        #status-bar {
+            position: fixed;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(6px);
+            padding: 6px 20px;
+            border-radius: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            font-size: 14px;
+            font-weight: 500;
+            color: #f0f0f0;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+            pointer-events: none;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #status-bar.hidden {
+            opacity: 0;
+        }
+        #status-bar button {
+            background: #7b61ff;
+            border: none;
+            color: #fff;
+            padding: 3px 14px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: 0.15s;
+        }
+        #status-bar button:hover {
+            background: #6a4ee0;
+        }
+
+        #toggle-ui-btn {
+            position: fixed;
+            top: 14px;
+            left: 14px;
+            z-index: 35;
+            background: rgba(20, 20, 30, 0.8);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        #toggle-ui-btn:hover {
+            background: rgba(60, 60, 80, 0.9);
+        }
+
+        #log-console {
+            position: fixed;
+            top: 70px;
+            right: 12px;
+            z-index: 30;
+            width: 260px;
+            max-height: 180px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 8px 12px;
+            overflow-y: auto;
+            font-size: 11px;
+            font-family: 'Menlo', 'Consolas', monospace;
+            color: #b0d0ff;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        #log-console.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #log-console div {
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        #log-console .log-time {
+            color: #888;
+            margin-right: 6px;
+        }
+
+        #popup-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 40;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(2px);
+        }
+        #popup-container.visible {
+            display: flex;
+        }
+        #popup-box {
+            background: #1a1a24;
+            border-radius: 24px;
+            padding: 28px 32px 24px;
+            max-width: 360px;
+            width: 90%;
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.8);
+            text-align: center;
+            pointer-events: auto;
+        }
+        #popup-box .dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        #popup-box .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3a3a4a;
+            transition: 0.2s;
+        }
+        #popup-box .dot.active {
+            background: #7b61ff;
+            box-shadow: 0 0 12px #7b61ff88;
+        }
+        #popup-box .dot.done {
+            background: #4caf50;
+        }
+        #popup-box h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        #popup-box .step-desc {
+            color: #aaa;
+            font-size: 14px;
+            margin-bottom: 18px;
+        }
+        #popup-box .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        #popup-box .btn-group button {
+            background: #2a2a3a;
+            border: none;
+            color: #fff;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: 0.15s;
+            border: 1px solid transparent;
+            flex: 1 0 auto;
+            min-width: 70px;
+        }
+        #popup-box .btn-group button:hover {
+            background: #3d3d55;
+        }
+        #popup-box .btn-group .primary {
+            background: #7b61ff;
+            color: #fff;
+        }
+        #popup-box .btn-group .primary:hover {
+            background: #6a4ee0;
+        }
+        #popup-box .btn-group .secondary {
+            background: #3a3a4a;
+        }
+        #popup-box .btn-group .danger {
+            background: #b33a4a;
+        }
+        #popup-box .btn-group .danger:hover {
+            background: #a02e3e;
+        }
+
+        .marker {
+            position: fixed;
+            pointer-events: none;
+            z-index: 25;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            transition: 0.1s;
+        }
+        .marker.green {
+            border-color: #4caf50;
+            background: rgba(76, 175, 80, 0.20);
+            box-shadow: 0 0 16px #4caf5088;
+        }
+        .marker.orange {
+            border-color: #ff9800;
+            background: rgba(255, 152, 0, 0.15);
+            box-shadow: 0 0 20px #ff980066;
+            width: 8%;
+            height: 8%;
+            transform: translate(-50%, -50%);
+        }
+        .marker .dot {
+            position: absolute;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .marker .dot.red {
+            width: 12px;
+            height: 12px;
+            background: #f44336;
+            box-shadow: 0 0 20px #f44336cc;
+        }
+        .marker .dot.purple {
+            width: 14px;
+            height: 14px;
+            background: #ab47bc;
+            box-shadow: 0 0 24px #ab47bccc;
+        }
+
+        #password-area {
+            position: fixed;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            padding: 6px 14px 6px 16px;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.08);
+            pointer-events: auto;
+        }
+        #password-area label {
+            font-size: 12px;
+            color: #ccc;
+            font-weight: 500;
+        }
+        #password-area input {
+            background: #1e1e2a;
+            border: 1px solid #3a3a4e;
+            border-radius: 30px;
+            padding: 4px 12px;
+            color: #fff;
+            font-size: 13px;
+            width: 120px;
+            outline: none;
+            font-family: inherit;
+        }
+        #password-area input:focus {
+            border-color: #7b61ff;
+        }
+        #start-bot-btn, #stop-bot-btn {
+            background: #4caf50;
+            border: none;
+            color: #fff;
+            font-weight: 600;
+            padding: 5px 14px;
+            border-radius: 30px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: 0.15s;
+            pointer-events: auto;
+        }
+        #start-bot-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        #start-bot-btn:hover:not(:disabled) {
+            background: #43a047;
+        }
+        #stop-bot-btn {
+            background: #b33a4a;
+            display: none;
+        }
+        #stop-bot-btn:hover {
+            background: #a02e3e;
+        }
+
+        .ui-hidden #status-bar,
+        .ui-hidden #log-console,
+        .ui-hidden #password-area,
+        .ui-hidden #toggle-ui-btn,
+        .ui-hidden .marker {
+            display: none !important;
+        }
+        .ui-hidden #popup-container {
+            display: none !important;
+        }
+
+        #log-console::-webkit-scrollbar {
+            width: 3px;
+        }
+        #log-console::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #log-console::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
 
+    <!-- ORIGINELE CLIENT ELEMENTEN -->
     <div id="game_frame"></div>
-
     <div class="bg-overlay"></div>
 
     <div id="loading-container">
@@ -208,6 +539,44 @@
         <button id="reload-btn" onclick="location.reload()">Try Again</button>
     </div>
 
+    <!-- BCLIENT ELEMENTEN -->
+    <div id="bclient-overlay"></div>
+
+    <div id="status-bar">
+        <span>🔹 Klik op "Start Selectie"</span>
+        <button id="start-selectie-btn">▶ Start</button>
+    </div>
+
+    <button id="toggle-ui-btn" title="Toggle UI">◻</button>
+
+    <div id="log-console"></div>
+
+    <div id="popup-container">
+        <div id="popup-box">
+            <div class="dots" id="dots-container"></div>
+            <h3 id="popup-title">Stap 1/4</h3>
+            <div class="step-desc" id="popup-desc">Selecteer de Server List</div>
+            <div class="btn-group">
+                <button class="primary" id="popup-select">Selecteer</button>
+                <button class="secondary" id="popup-skip">Overslaan</button>
+                <button class="danger" id="popup-cancel">Annuleren</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="marker green" id="marker-green" style="display:none;"></div>
+    <div class="marker orange" id="marker-orange" style="display:none;"></div>
+    <div class="marker" id="marker-red" style="display:none;"><div class="dot red"></div></div>
+    <div class="marker" id="marker-purple" style="display:none;"><div class="dot purple"></div></div>
+
+    <div id="password-area">
+        <label for="pass-input">🔑</label>
+        <input type="text" id="pass-input" value="<pass>" placeholder="wachtwoord" />
+        <button id="start-bot-btn" disabled>▶ Start Bot</button>
+        <button id="stop-bot-btn">⏹ Stop</button>
+    </div>
+
+    <!-- ORIGINELE CLIENT SCRIPT (volledig intact) -->
     <script>
         "use strict";
         (function () {
@@ -277,5 +646,418 @@
             });
         })();
     </script>
+
+    <!-- BCLIENT SCRIPT -->
+    <script>
+        (function() {
+            "use strict";
+
+            // DOM refs
+            const statusBar = document.getElementById('status-bar');
+            const logConsole = document.getElementById('log-console');
+            const popupContainer = document.getElementById('popup-container');
+            const popupTitle = document.getElementById('popup-title');
+            const popupDesc = document.getElementById('popup-desc');
+            const dotsContainer = document.getElementById('dots-container');
+            const popupSelect = document.getElementById('popup-select');
+            const popupSkip = document.getElementById('popup-skip');
+            const popupCancel = document.getElementById('popup-cancel');
+            const toggleBtn = document.getElementById('toggle-ui-btn');
+            const startBotBtn = document.getElementById('start-bot-btn');
+            const stopBotBtn = document.getElementById('stop-bot-btn');
+            const passInput = document.getElementById('pass-input');
+            const overlay = document.getElementById('bclient-overlay');
+            const startSelectieBtn = document.getElementById('start-selectie-btn');
+
+            const markerGreen = document.getElementById('marker-green');
+            const markerOrange = document.getElementById('marker-orange');
+            const markerRed = document.getElementById('marker-red');
+            const markerPurple = document.getElementById('marker-purple');
+
+            let selectionState = {
+                step: 0,
+                serverListPos: null,
+                disconnectAreaPos: null,
+                disconnectBtnPos: null,
+                survivalItemPos: null,
+                completed: false
+            };
+
+            let isSelecting = false;
+            let waitingForClick = false;
+            let currentStep = 0;
+            let botRunning = false;
+            let botStopRequested = false;
+
+            function log(msg) {
+                const time = new Date().toLocaleTimeString();
+                const div = document.createElement('div');
+                div.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
+                logConsole.prepend(div);
+                if (logConsole.children.length > 80) logConsole.lastChild.remove();
+            }
+
+            function setStatus(text) {
+                const span = statusBar.querySelector('span');
+                if (span) span.textContent = text;
+            }
+
+            function hideAllMarkers() {
+                ['marker-green','marker-orange','marker-red','marker-purple'].forEach(id => {
+                    document.getElementById(id).style.display = 'none';
+                });
+            }
+
+            function showPopup(step) {
+                currentStep = step;
+                const total = 4;
+                dotsContainer.innerHTML = '';
+                for (let i = 1; i <= total; i++) {
+                    const dot = document.createElement('span');
+                    dot.className = 'dot';
+                    if (i < step) dot.classList.add('done');
+                    else if (i === step) dot.classList.add('active');
+                    dotsContainer.appendChild(dot);
+                }
+                const labels = [
+                    'Selecteer Server List',
+                    'Selecteer Disconnect Area',
+                    'Selecteer Disconnect knop',
+                    'Selecteer Survival Item'
+                ];
+                popupTitle.textContent = `Stap ${step}/${total}`;
+                popupDesc.textContent = labels[step-1] || '';
+                popupContainer.classList.add('visible');
+                isSelecting = true;
+                waitingForClick = false;
+                overlay.classList.add('active');
+                setStatus(`Stap ${step}/4: ${labels[step-1]}`);
+            }
+
+            function hidePopup() {
+                popupContainer.classList.remove('visible');
+                isSelecting = false;
+                overlay.classList.remove('active');
+            }
+
+            function startSelection() {
+                hideAllMarkers();
+                selectionState = { step:0, serverListPos:null, disconnectAreaPos:null, disconnectBtnPos:null, survivalItemPos:null, completed:false };
+                startBotBtn.disabled = true;
+                log('📋 Selectie gestart');
+                showPopup(1);
+            }
+
+            function skipStep(step) {
+                const defaultPos = { x: 45, y: 45 };
+                const defaultDot = { x: 50, y: 50 };
+                switch(step) {
+                    case 1: selectionState.serverListPos = { ...defaultPos }; break;
+                    case 2: selectionState.disconnectAreaPos = { ...defaultPos }; break;
+                    case 3: selectionState.disconnectBtnPos = { ...defaultDot }; break;
+                    case 4: selectionState.survivalItemPos = { ...defaultDot }; break;
+                }
+                log(`Stap ${step} overgeslagen (default positie)`);
+                advanceAfterStep(step);
+            }
+
+            function advanceAfterStep(step) {
+                if (step === 4) {
+                    selectionState.completed = true;
+                    hidePopup();
+                    setStatus('✅ Selectie compleet! Start de bot.');
+                    startBotBtn.disabled = false;
+                    log('✅ Selectie compleet!');
+                    return;
+                }
+                const next = step + 1;
+                showPopup(next);
+            }
+
+            function handleCanvasClick(e) {
+                if (!waitingForClick) return;
+                const rect = overlay.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 100;
+                const y = ((e.clientY - rect.top) / rect.height) * 100;
+                const step = currentStep;
+
+                switch(step) {
+                    case 1:
+                        selectionState.serverListPos = { x, y };
+                        markerGreen.style.left = x + '%';
+                        markerGreen.style.top = y + '%';
+                        markerGreen.style.width = '6%';
+                        markerGreen.style.height = '4%';
+                        markerGreen.style.display = 'block';
+                        markerGreen.style.transform = 'translate(-50%, -50%)';
+                        log(`📌 Server List op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
+                        break;
+                    case 2:
+                        selectionState.disconnectAreaPos = { x, y };
+                        markerOrange.style.left = x + '%';
+                        markerOrange.style.top = y + '%';
+                        markerOrange.style.display = 'block';
+                        log(`📌 Disconnect Area op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
+                        break;
+                    case 3:
+                        selectionState.disconnectBtnPos = { x, y };
+                        markerRed.style.left = x + '%';
+                        markerRed.style.top = y + '%';
+                        markerRed.style.display = 'block';
+                        log(`📌 Disconnect knop op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
+                        break;
+                    case 4:
+                        selectionState.survivalItemPos = { x, y };
+                        markerPurple.style.left = x + '%';
+                        markerPurple.style.top = y + '%';
+                        markerPurple.style.display = 'block';
+                        log(`📌 Survival Item op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
+                        break;
+                }
+                waitingForClick = false;
+                hidePopup();
+                setStatus(`✅ Stap ${step} vastgelegd`);
+                setTimeout(() => {
+                    if (!isSelecting && !waitingForClick) {
+                        advanceAfterStep(step);
+                    }
+                }, 300);
+            }
+
+            // Event listeners
+            startSelectieBtn.addEventListener('click', startSelection);
+
+            popupSelect.addEventListener('click', () => {
+                if (!isSelecting) return;
+                hidePopup();
+                waitingForClick = true;
+                setStatus(`👆 Klik op het scherm (stap ${currentStep})`);
+                overlay.classList.add('active');
+            });
+
+            popupSkip.addEventListener('click', () => {
+                if (!isSelecting) return;
+                skipStep(currentStep);
+            });
+
+            popupCancel.addEventListener('click', () => {
+                if (!isSelecting) return;
+                hidePopup();
+                waitingForClick = false;
+                setStatus('❌ Selectie geannuleerd');
+                hideAllMarkers();
+                overlay.classList.remove('active');
+                startBotBtn.disabled = true;
+                log('❌ Selectie geannuleerd');
+            });
+
+            overlay.addEventListener('click', handleCanvasClick);
+            overlay.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                if (!touch) return;
+                const me = new MouseEvent('click', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                });
+                handleCanvasClick(me);
+            }, { passive: true });
+
+            toggleBtn.addEventListener('click', () => {
+                document.body.classList.toggle('ui-hidden');
+            });
+
+            // ---- BOT LOGIC ----
+            function dispatchMouseEvent(type, x, y, button=0) {
+                const el = document.elementFromPoint(x, y) || overlay;
+                const ev = new MouseEvent(type, {
+                    clientX: x, clientY: y,
+                    button: button,
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
+                });
+                el.dispatchEvent(ev);
+            }
+
+            function dispatchKeyEvent(type, key, code='') {
+                const ev = new KeyboardEvent(type, {
+                    key: key,
+                    code: code || key,
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
+                });
+                document.dispatchEvent(ev);
+            }
+
+            // Type een string karakter voor karakter zoals een echte speler
+            async function typeString(text, delayBetween=50) {
+                for (const char of text) {
+                    if (botStopRequested) break;
+                    // Voor speciale karakters zoals '/' gebruiken we de juiste code
+                    let code = 'Key' + char.toUpperCase();
+                    if (char === '/') code = 'Slash';
+                    else if (char === ' ') code = 'Space';
+                    else if (char === '.') code = 'Period';
+                    else if (char === '@') code = 'Digit2'; // Shift+2
+                    else if (char === '#') code = 'Digit3'; // Shift+3
+                    else if (char === '!') code = 'Digit1'; // Shift+1
+                    else if (char === '?') code = 'Slash'; // Shift+/
+                    
+                    dispatchKeyEvent('keydown', char, code);
+                    dispatchKeyEvent('keyup', char, code);
+                    await sleep(delayBetween);
+                }
+            }
+
+            function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+            function getPos(sel) {
+                if (!sel) return null;
+                const rect = overlay.getBoundingClientRect();
+                return {
+                    x: rect.left + (sel.x / 100) * rect.width,
+                    y: rect.top + (sel.y / 100) * rect.height
+                };
+            }
+
+            function pixelMatch(area, threshold) {
+                // Simulatie: 80% kans op match voor demo
+                return Math.random() > 0.2;
+            }
+
+            async function botLoop() {
+                if (botRunning) return;
+                botRunning = true;
+                botStopRequested = false;
+                stopBotBtn.style.display = 'inline-block';
+                startBotBtn.disabled = true;
+                log('🤖 Bot gestart');
+
+                while (!botStopRequested) {
+                    try {
+                        // 1. Dubbelklik op server list
+                        const sl = selectionState.serverListPos;
+                        if (sl) {
+                            const pos = getPos(sl);
+                            if (pos) {
+                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
+                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                                await sleep(100);
+                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
+                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                                log('📡 Dubbelklik op server list');
+                            }
+                        }
+                        await sleep(5000);
+
+                        // 2. T indrukken (chat openen)
+                        dispatchKeyEvent('keydown', 't', 'KeyT');
+                        dispatchKeyEvent('keyup', 't', 'KeyT');
+                        log('⌨️ T ingedrukt (chat openen)');
+                        await sleep(1000);
+
+                        // 3. Type /login <pass> zoals een echte speler
+                        const pass = passInput.value || '<pass>';
+                        const cmd = '/login ' + pass;
+                        log(`⌨️ Typen: ${cmd}`);
+                        await typeString(cmd, 30); // 30ms tussen elke toets
+                        log(`✅ ${cmd} getypt`);
+                        await sleep(500);
+
+                        // 4. Enter
+                        dispatchKeyEvent('keydown', 'Enter', 'Enter');
+                        dispatchKeyEvent('keyup', 'Enter', 'Enter');
+                        log('⏎ Enter (verstuur commando)');
+                        await sleep(30000 + Math.floor(Math.random() * 5000));
+
+                        // 5. Rechtsklik op survival item
+                        const si = selectionState.survivalItemPos;
+                        if (si) {
+                            const pos = getPos(si);
+                            if (pos) {
+                                dispatchMouseEvent('mousedown', pos.x, pos.y, 2);
+                                dispatchMouseEvent('mouseup', pos.x, pos.y, 2);
+                                log('🖱️ Rechtsklik op survival item');
+                            }
+                        }
+                        await sleep(5000);
+
+                        // 6. Wacht 10-15 min
+                        const waitTime = 600000 + Math.floor(Math.random() * 300000);
+                        log(`⏳ Wacht ${(waitTime/60000).toFixed(1)} min`);
+                        await sleep(waitTime);
+
+                        // 7. Escape
+                        dispatchKeyEvent('keydown', 'Escape', 'Escape');
+                        dispatchKeyEvent('keyup', 'Escape', 'Escape');
+                        log('⎋ Escape');
+                        await sleep(3000);
+
+                        // 8. Klik disconnect
+                        const db = selectionState.disconnectBtnPos;
+                        if (db) {
+                            const pos = getPos(db);
+                            if (pos) {
+                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
+                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                                log('🔴 Klik disconnect');
+                            }
+                        }
+                        await sleep(3000);
+
+                        // 9. Check disconnect area
+                        const area = selectionState.disconnectAreaPos;
+                        let visible = false;
+                        if (area) {
+                            visible = pixelMatch(area, 0.7);
+                        }
+                        if (visible) {
+                            log('🔄 Disconnect nog zichtbaar, nogmaals klik');
+                            if (db) {
+                                const pos = getPos(db);
+                                if (pos) {
+                                    dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
+                                    dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                                }
+                            }
+                            await sleep(3000);
+                        } else {
+                            log('✅ Disconnect niet zichtbaar, ga door');
+                        }
+                        await sleep(3000);
+
+                        if (botStopRequested) break;
+                    } catch (err) {
+                        log('❌ Fout in bot loop: ' + err.message);
+                        await sleep(5000);
+                    }
+                }
+
+                botRunning = false;
+                stopBotBtn.style.display = 'none';
+                startBotBtn.disabled = false;
+                log('⏹ Bot gestopt');
+            }
+
+            startBotBtn.addEventListener('click', () => {
+                if (!selectionState.completed) {
+                    log('⚠️ Selecteer eerst alle stappen');
+                    return;
+                }
+                if (botRunning) return;
+                botLoop();
+            });
+
+            stopBotBtn.addEventListener('click', () => {
+                botStopRequested = true;
+                log('⏳ Stop aangevraagd...');
+            });
+
+            log('🟢 BClient geladen');
+            setStatus('🔹 Klik op "Start Selectie" om te beginnen');
+        })();
+    </script>
+
 </body>
 </html>
