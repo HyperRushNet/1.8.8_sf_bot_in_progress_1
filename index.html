@@ -269,9 +269,9 @@
             top: 70px;
             right: 12px;
             z-index: 30;
-            width: 360px;
-            max-height: 320px;
-            background: rgba(0, 0, 0, 0.85);
+            width: 380px;
+            max-height: 350px;
+            background: rgba(0, 0, 0, 0.88);
             backdrop-filter: blur(6px);
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 12px;
@@ -305,6 +305,7 @@
         #log-console .log-farming { color: #88ddff; }
         #log-console .log-reset { color: #ff8844; }
         #log-console .log-process { color: #ff77aa; }
+        #log-console .log-storage { color: #66ddff; }
 
         #popup-container {
             position: fixed;
@@ -611,6 +612,30 @@
         #farming-progress.visible {
             display: block;
         }
+
+        #load-storage-btn {
+            position: fixed;
+            bottom: 200px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 4px 16px;
+            border-radius: 30px;
+            font-size: 11px;
+            cursor: pointer;
+            display: none;
+            font-family: inherit;
+        }
+        #load-storage-btn.visible {
+            display: block;
+        }
+        #load-storage-btn:hover {
+            background: rgba(60,60,80,0.8);
+        }
     </style>
 </head>
 <body>
@@ -647,6 +672,7 @@
     <div id="log-console"></div>
     <div id="ocr-status">🔍 OCR bezig...</div>
     <div id="farming-progress">⏳ Farming 0/15 min</div>
+    <button id="load-storage-btn">💾 Laad opgeslagen posities</button>
 
     <div id="popup-container">
         <div id="popup-box">
@@ -760,12 +786,12 @@
         })();
     </script>
 
-    <!-- BCLIENT SCRIPT MET TESSERACT OCR + HEAVY PROCESSING -->
+    <!-- BCLIENT SCRIPT MET ALLES -->
     <script>
         (function() {
             "use strict";
 
-            // DOM refs
+            // ---- DOM REFS ----
             const statusBar = document.getElementById('status-bar');
             const logConsole = document.getElementById('log-console');
             const popupContainer = document.getElementById('popup-container');
@@ -783,6 +809,7 @@
             const startSelectieBtn = document.getElementById('start-selectie-btn');
             const ocrStatus = document.getElementById('ocr-status');
             const farmingProgress = document.getElementById('farming-progress');
+            const loadStorageBtn = document.getElementById('load-storage-btn');
 
             const markerGreen = document.getElementById('marker-green');
             const markerOrange = document.getElementById('marker-orange');
@@ -790,6 +817,7 @@
             const markerPurple = document.getElementById('marker-purple');
             const markerCyan = document.getElementById('marker-cyan');
 
+            // ---- STATE ----
             let selectionState = {
                 step: 0,
                 serverListPos: null,
@@ -806,26 +834,28 @@
             let botRunning = false;
             let botStopRequested = false;
             let ocrCheckCount = 0;
+            let isPausedForOCR = false;
 
             // Tesseract worker
             let ocrWorker = null;
             let ocrReady = false;
 
-            // MINIMUM CONFIDENCE VOOR OCR (50%)
+            // CONSTANTS
             const MIN_CONFIDENCE = 50;
+            const STORAGE_KEY = 'bclient_marker_positions';
 
             // Flags voor disconnect fase
             let justPressedEscape = false;
             let inDisconnectPhase = false;
 
-            // LOG functies
+            // ---- LOG FUNCTIES ----
             function log(msg, type = '') {
                 const time = new Date().toLocaleTimeString();
                 const div = document.createElement('div');
                 const cls = type ? `log-${type}` : '';
                 div.innerHTML = `<span class="log-time">[${time}]</span> <span class="${cls}">${msg}</span>`;
                 logConsole.prepend(div);
-                if (logConsole.children.length > 180) logConsole.lastChild.remove();
+                if (logConsole.children.length > 200) logConsole.lastChild.remove();
                 console.log(`[${time}] ${msg}`);
             }
 
@@ -837,18 +867,97 @@
             function logFarming(msg) { log('⏳ ' + msg, 'farming'); }
             function logReset(msg) { log('🔄 ' + msg, 'reset'); }
             function logProcess(msg) { log('⚡ ' + msg, 'process'); }
+            function logStorage(msg) { log('💾 ' + msg, 'storage'); }
 
             function setStatus(text) {
                 const span = statusBar.querySelector('span');
                 if (span) span.textContent = text;
             }
 
+            // ---- STORAGE FUNCTIES ----
+            function savePositions() {
+                try {
+                    const data = {
+                        serverListPos: selectionState.serverListPos,
+                        backToServerListPos: selectionState.backToServerListPos,
+                        disconnectBtnPos: selectionState.disconnectBtnPos,
+                        survivalItemPos: selectionState.survivalItemPos,
+                        backToGamePos: selectionState.backToGamePos,
+                        timestamp: Date.now()
+                    };
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                    logStorage('Posities opgeslagen in localStorage');
+                    return true;
+                } catch (err) {
+                    logError('Opslaan mislukt: ' + err.message);
+                    return false;
+                }
+            }
+
+            function loadPositions() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (!raw) {
+                        logStorage('Geen opgeslagen posities gevonden');
+                        return false;
+                    }
+                    const data = JSON.parse(raw);
+                    
+                    // Check of de data compleet is
+                    const required = ['serverListPos', 'backToServerListPos', 'disconnectBtnPos', 'survivalItemPos', 'backToGamePos'];
+                    for (const key of required) {
+                        if (!data[key]) {
+                            logStorage(`Onvolledige data: ${key} ontbreekt`);
+                            return false;
+                        }
+                    }
+                    
+                    // Restore
+                    selectionState.serverListPos = data.serverListPos;
+                    selectionState.backToServerListPos = data.backToServerListPos;
+                    selectionState.disconnectBtnPos = data.disconnectBtnPos;
+                    selectionState.survivalItemPos = data.survivalItemPos;
+                    selectionState.backToGamePos = data.backToGamePos;
+                    selectionState.completed = true;
+                    
+                    // Update markers
+                    updateMarkerPosition(markerGreen, data.serverListPos);
+                    updateMarkerPosition(markerOrange, data.backToServerListPos);
+                    updateMarkerPosition(markerRed, data.disconnectBtnPos);
+                    updateMarkerPosition(markerPurple, data.survivalItemPos);
+                    updateMarkerPosition(markerCyan, data.backToGamePos);
+                    
+                    startBotBtn.disabled = false;
+                    setStatus('✅ Posities geladen! Start de bot.');
+                    logStorage(`Posities geladen van ${new Date(data.timestamp).toLocaleString()}`);
+                    logStorage(`Server List: ${data.serverListPos.x.toFixed(1)}%, ${data.serverListPos.y.toFixed(1)}%`);
+                    logStorage(`Back to Server List: ${data.backToServerListPos.x.toFixed(1)}%, ${data.backToServerListPos.y.toFixed(1)}%`);
+                    logStorage(`Disconnect: ${data.disconnectBtnPos.x.toFixed(1)}%, ${data.disconnectBtnPos.y.toFixed(1)}%`);
+                    logStorage(`Survival Item: ${data.survivalItemPos.x.toFixed(1)}%, ${data.survivalItemPos.y.toFixed(1)}%`);
+                    logStorage(`Back to Game: ${data.backToGamePos.x.toFixed(1)}%, ${data.backToGamePos.y.toFixed(1)}%`);
+                    
+                    return true;
+                } catch (err) {
+                    logError('Laden mislukt: ' + err.message);
+                    return false;
+                }
+            }
+
+            function updateMarkerPosition(el, pos) {
+                if (!el || !pos) return;
+                el.style.left = pos.x + '%';
+                el.style.top = pos.y + '%';
+                el.style.display = 'block';
+            }
+
+            // ---- MARKER FUNCTIES ----
             function hideAllMarkers() {
                 ['marker-green','marker-orange','marker-red','marker-purple','marker-cyan'].forEach(id => {
                     document.getElementById(id).style.display = 'none';
                 });
             }
 
+            // ---- POPUP FUNCTIES ----
             function showPopup(step) {
                 currentStep = step;
                 const total = 5;
@@ -888,6 +997,7 @@
                 startBotBtn.disabled = true;
                 log('📋 Selectie gestart');
                 showPopup(1);
+                loadStorageBtn.classList.remove('visible');
             }
 
             function skipStep(step) {
@@ -936,6 +1046,8 @@
                     setStatus('✅ Selectie compleet! Start de bot.');
                     startBotBtn.disabled = false;
                     logSuccess('Selectie compleet!');
+                    savePositions();
+                    loadStorageBtn.classList.remove('visible');
                     return;
                 }
                 const next = step + 1;
@@ -1005,10 +1117,11 @@
                     startBotBtn.disabled = false;
                     setStatus('✅ Selectie compleet! Start de bot.');
                     logSuccess('Alle markers zijn gezet');
+                    savePositions();
                 }
             }
 
-            // ---- SLEEPFUNCTIE ----
+            // ---- DRAGGABLE ----
             function makeDraggable(el) {
                 let isDragging = false;
                 let startX, startY, startLeftPct, startTopPct;
@@ -1073,6 +1186,10 @@
                     if (isDragging) {
                         isDragging = false;
                         el.style.cursor = 'grab';
+                        // Save after drag
+                        if (selectionState.completed) {
+                            savePositions();
+                        }
                     }
                 };
 
@@ -1091,7 +1208,7 @@
             makeDraggable(markerPurple);
             makeDraggable(markerCyan);
 
-            // ---- TESSERACT OCR FUNCTIES ----
+            // ---- TESSERACT OCR ----
             async function initOCR() {
                 try {
                     logDebug('Tesseract.js initialiseren...');
@@ -1133,7 +1250,7 @@
                 return canvas;
             }
 
-            // ---- SUPER HEAVY PROCESSING ----
+            // ---- HEAVY PROCESSING ----
             function captureAndProcessCanvas(canvas) {
                 try {
                     const offscreen = document.createElement('canvas');
@@ -1153,53 +1270,33 @@
                     const w = offscreen.width;
                     const h = offscreen.height;
                     
-                    logProcess(`🖼️ Canvas: ${w}x${h}, ${data.length} pixels`);
-                    
                     // HEAVY PROCESSING: Alleen de lichtste pixels doorlaten
-                    // De "Back to Game" knop is lichtgrijs/wit op donkere achtergrond
+                    const LIGHT_THRESHOLD = 180;
                     
-                    // Stap 1: Bepaal welke pixels licht genoeg zijn (hele hoge drempel)
-                    const LIGHT_THRESHOLD = 180; // Alleen pixels boven 180 helderheid blijven over
-                    
-                    // Stap 2: Maak een binary mask van lichte pixels
-                    let lightPixels = [];
+                    // Stap 1: Binary threshold
+                    let lightCount = 0;
                     for (let i = 0; i < data.length; i += 4) {
-                        const r = data[i];
-                        const g = data[i + 1];
-                        const b = data[i + 2];
-                        const brightness = (r + g + b) / 3;
-                        
-                        // Alleen hele lichte pixels houden (wit/lichtgrijs)
+                        const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
                         if (brightness > LIGHT_THRESHOLD) {
-                            // Zet naar puur wit
                             data[i] = 255;
-                            data[i + 1] = 255;
-                            data[i + 2] = 255;
-                            data[i + 3] = 255;
-                            lightPixels.push(i);
+                            data[i+1] = 255;
+                            data[i+2] = 255;
+                            data[i+3] = 255;
+                            lightCount++;
                         } else {
-                            // Zet naar puur zwart
                             data[i] = 0;
-                            data[i + 1] = 0;
-                            data[i + 2] = 0;
-                            data[i + 3] = 255;
+                            data[i+1] = 0;
+                            data[i+2] = 0;
+                            data[i+3] = 255;
                         }
                     }
                     
-                    logProcess(`💡 ${lightPixels.length} lichte pixels gevonden (${(lightPixels.length / (data.length/4) * 100).toFixed(1)}%)`);
-                    
-                    // Stap 3: Extra filter - verwijder geïsoleerde pixels (ruis)
-                    // Alleen clusters van pixels die dicht bij elkaar zitten blijven over
+                    // Stap 2: Remove isolated pixels (3x3 window)
                     const processedData = new Uint8ClampedArray(data);
-                    const minClusterSize = 5;
-                    
-                    // Simpele cluster detectie: kijk naar naburige pixels
                     for (let i = 0; i < data.length; i += 4) {
-                        if (data[i] === 255) { // Als het een witte pixel is
+                        if (data[i] === 255) {
                             const x = (i / 4) % w;
                             const y = Math.floor((i / 4) / w);
-                            
-                            // Tel witte pixels in de buurt (3x3 window)
                             let neighbors = 0;
                             for (let dy = -1; dy <= 1; dy++) {
                                 for (let dx = -1; dx <= 1; dx++) {
@@ -1208,29 +1305,24 @@
                                     const ny = y + dy;
                                     if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
                                         const idx = (ny * w + nx) * 4;
-                                        if (data[idx] === 255) {
-                                            neighbors++;
-                                        }
+                                        if (data[idx] === 255) neighbors++;
                                     }
                                 }
                             }
-                            
-                            // Als er te weinig buren zijn, is het ruis
                             if (neighbors < 2) {
                                 processedData[i] = 0;
-                                processedData[i + 1] = 0;
-                                processedData[i + 2] = 0;
+                                processedData[i+1] = 0;
+                                processedData[i+2] = 0;
                             }
                         }
                     }
                     
-                    // Stap 4: Nog een keer - verwijder kleine clusters
-                    // Dit is een tweede pass om geïsoleerde pixels weg te halen
+                    // Stap 3: Second pass - larger window
+                    const finalData = new Uint8ClampedArray(processedData);
                     for (let i = 0; i < processedData.length; i += 4) {
                         if (processedData[i] === 255) {
                             const x = (i / 4) % w;
                             const y = Math.floor((i / 4) / w);
-                            
                             let neighbors = 0;
                             for (let dy = -2; dy <= 2; dy++) {
                                 for (let dx = -2; dx <= 2; dx++) {
@@ -1239,25 +1331,19 @@
                                     const ny = y + dy;
                                     if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
                                         const idx = (ny * w + nx) * 4;
-                                        if (processedData[idx] === 255) {
-                                            neighbors++;
-                                        }
+                                        if (processedData[idx] === 255) neighbors++;
                                     }
                                 }
                             }
-                            
                             if (neighbors < 3) {
-                                processedData[i] = 0;
-                                processedData[i + 1] = 0;
-                                processedData[i + 2] = 0;
+                                finalData[i] = 0;
+                                finalData[i+1] = 0;
+                                finalData[i+2] = 0;
                             }
                         }
                     }
                     
-                    // Zet de processed data terug
-                    ctx.putImageData(new ImageData(processedData, w, h), 0, 0);
-                    
-                    logProcess('✅ Heavy processing voltooid (alleen lichtste pixels over)');
+                    ctx.putImageData(new ImageData(finalData, w, h), 0, 0);
                     
                     return offscreen.toDataURL('image/png');
                 } catch (err) {
@@ -1266,13 +1352,14 @@
                 }
             }
 
+            // ---- PERFORM OCR ----
             async function performOCR() {
                 if (!ocrReady) {
                     logDebug('OCR niet gereed, probeer te initialiseren...');
                     await initOCR();
                     if (!ocrReady) {
                         logError('OCR nog steeds niet gereed');
-                        return { found: false, confidence: 0, text: '', debug: 'OCR niet gereed' };
+                        return { text: '', confidence: 0, words: 0, debug: 'OCR niet gereed' };
                     }
                 }
 
@@ -1285,16 +1372,15 @@
                     const canvas = getCanvas();
                     if (!canvas) {
                         ocrStatus.classList.remove('visible');
-                        return { found: false, confidence: 0, text: '', debug: 'Geen canvas' };
+                        return { text: '', confidence: 0, words: 0, debug: 'Geen canvas' };
                     }
 
                     const imageData = captureAndProcessCanvas(canvas);
                     if (!imageData) {
                         ocrStatus.classList.remove('visible');
-                        return { found: false, confidence: 0, text: '', debug: 'Geen image data' };
+                        return { text: '', confidence: 0, words: 0, debug: 'Geen image data' };
                     }
 
-                    logDebug('Tesseract aan het lezen...');
                     const startTime = Date.now();
                     const result = await ocrWorker.recognize(imageData);
                     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -1304,7 +1390,6 @@
                     const words = result.data.words || [];
                     
                     logOCR(`OCR #${ocrCheckCount} voltooid in ${duration}s, ${words.length} woorden, confidence: ${confidence.toFixed(1)}%`);
-                    logOCR(`📝 OCR tekst: "${text.substring(0, 100)}..."`);
                     
                     ocrStatus.classList.remove('visible');
 
@@ -1324,17 +1409,25 @@
 
             // ---- COMBINED OCR CHECK ----
             async function doOCRCheck(stepName) {
+                // Pause before OCR
+                isPausedForOCR = true;
+                await sleep(500);
+                
                 logStep(`📖 OCR check voor "${stepName}"...`);
                 const result = await performOCR();
+                
+                // Pause after OCR
+                await sleep(500);
+                isPausedForOCR = false;
                 
                 const text = result.text || '';
                 const confidence = result.confidence || 0;
                 const searchText = text.toLowerCase();
                 
-                // Check 1: "back to server list" (onderste helft)
+                // Check 1: "back to server list"
                 const foundBackToServer = searchText.includes('back to server list');
                 
-                // Check 2: "back to game" (bovenste helft - lichtgrijze tekst)
+                // Check 2: "back to game"
                 const foundBackToGame = searchText.includes('back to game') || 
                                         searchText.includes('back to the game') ||
                                         searchText.includes('resume game') ||
@@ -1342,7 +1435,7 @@
 
                 logDebug(`📊 OCR: BackToServer=${foundBackToServer}, BackToGame=${foundBackToGame}, conf=${confidence.toFixed(1)}%`);
 
-                // PRIORITEIT 1: Back to Server List (altijd als gevonden en confidence >= 50%)
+                // PRIORITEIT 1: Back to Server List
                 if (foundBackToServer && confidence >= MIN_CONFIDENCE) {
                     logSuccess(`🎯 "Back to server list" gevonden! confidence: ${confidence.toFixed(1)}%`);
                     
@@ -1353,7 +1446,6 @@
                             logSuccess(`📐 Klik op Back to Server List marker (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
                             dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
                             dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                            logDebug('⏳ Wacht 1s na klik...');
                             await sleep(1000);
                             logReset('🔄 Back to Server List trigger! Herstart vanaf stap 1!');
                             return 'reset';
@@ -1363,7 +1455,7 @@
                     }
                 }
 
-                // PRIORITEIT 2: Back to Game (alleen als we NIET in de disconnect fase zitten)
+                // PRIORITEIT 2: Back to Game
                 if (foundBackToGame && confidence >= MIN_CONFIDENCE) {
                     if (justPressedEscape && inDisconnectPhase) {
                         logDebug(`⏭️ "Back to game" gevonden maar we zitten in disconnect fase, overslaan`);
@@ -1377,7 +1469,6 @@
                                 logSuccess(`📐 Klik op Back to Game marker (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                logDebug('⏳ Wacht 1s na klik...');
                                 await sleep(1000);
                                 logDebug('✅ Back to Game geklikt');
                                 return 'backtogame';
@@ -1475,7 +1566,6 @@
                 let cycleCount = 0;
                 let resetFromOCR = false;
 
-                // Reset flags
                 justPressedEscape = false;
                 inDisconnectPhase = false;
 
@@ -1507,7 +1597,7 @@
                                 log(`📡 Dubbelklik op server list (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                await sleep(150);
+                                await sleep(200);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
                             }
@@ -1597,6 +1687,7 @@
                                 log(`🖱️ Rechtsklik op survival item (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 2);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 2);
+                                await sleep(300);
                             }
                         } else {
                             logError('❌ Survival item positie niet ingesteld!');
@@ -1625,6 +1716,7 @@
                                 log(`🖱️ Linksklik op survival item (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                                await sleep(300);
                             }
                         }
                         const action12 = await doOCRCheck('Na linksklik');
@@ -1666,13 +1758,13 @@
                         const action14 = await doOCRCheck('Voor Escape');
                         if (action14 === 'reset') { resetFromOCR = true; continue; }
                         
-                        // Zet flags voor Escape
                         justPressedEscape = true;
                         inDisconnectPhase = true;
                         
                         dispatchKeyEvent('keydown', 'Escape', 'Escape');
                         dispatchKeyEvent('keyup', 'Escape', 'Escape');
                         log('⎋ Escape');
+                        await sleep(500);
                         
                         const action15 = await doOCRCheck('Na Escape');
                         if (action15 === 'reset') { 
@@ -1699,7 +1791,6 @@
                         
                         // === STAP 14: Disconnect ===
                         logStep('📍 STAP 9: Disconnect');
-                        // GEEN OCR VOOR DISCONNECT - direct klikken op de marker
                         const db = selectionState.disconnectBtnPos;
                         if (db) {
                             const pos = getPixelPos(db);
@@ -1707,13 +1798,13 @@
                                 log(`🔴 Disconnect op marker (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
                                 dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
                                 dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                                await sleep(500);
                             }
                         } else {
                             logError('❌ Disconnect knop positie niet ingesteld!');
                             break;
                         }
                         
-                        // Reset flags na disconnect
                         justPressedEscape = false;
                         inDisconnectPhase = false;
                         
@@ -1811,6 +1902,12 @@
                 log('⏳ Stop aangevraagd...');
             });
 
+            loadStorageBtn.addEventListener('click', () => {
+                if (loadPositions()) {
+                    loadStorageBtn.classList.remove('visible');
+                }
+            });
+
             // ---- TEST OCR ----
             function testOCR() {
                 logDebug('📖 Handmatige OCR test (heavy processing)...');
@@ -1828,13 +1925,24 @@
 
             // ---- INIT ----
             checkCompletion();
-            log('🟢 BClient geladen met Tesseract.js OCR + Heavy Processing');
+            log('🟢 BClient geladen - FINALE VERSIE');
             log(`🎯 Min confidence: ${MIN_CONFIDENCE}%`);
             log(`📍 5 markers: Server List | Back to Server List | Disconnect | Survival Item | Back to Game`);
             log(`🔄 Prio 1: "back to server list" → klik oranje + reset naar stap 1`);
             log(`🎮 Prio 2: "back to game" → klik cyaan (behalve tijdens disconnect fase)`);
-            log(`⚡ Heavy processing: alleen lichtste pixels (>180 brightness) blijven over`);
-            setStatus('🔹 Klik op "Start Selectie" of sleep markers');
+            log(`⚡ Heavy processing: alleen lichtste pixels (>180) blijven over`);
+            log(`💾 Posities worden automatisch opgeslagen in localStorage`);
+            log(`⏳ Pauze van 500ms voor en na elke OCR check`);
+            
+            // Check for saved positions
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                loadStorageBtn.classList.add('visible');
+                loadStorageBtn.textContent = '💾 Laad opgeslagen posities';
+                logStorage('Opgeslagen posities gevonden! Klik op "Laad opgeslagen posities"');
+            }
+            
+            setStatus('🔹 Klik op "Start Selectie" of laad opgeslagen posities');
             
             setTimeout(() => {
                 initOCR();
@@ -1845,8 +1953,14 @@
                     logDebug('🔍 Handmatige OCR test...');
                     testOCR();
                 }
+                if (e.key === 's' || e.key === 'S') {
+                    if (selectionState.completed) {
+                        savePositions();
+                        logStorage('Handmatig opgeslagen!');
+                    }
+                }
             });
-            logDebug('💡 Druk op "O" voor handmatige OCR test');
+            logDebug('💡 Druk op "O" voor OCR test, "S" om posities op te slaan');
             
             setTimeout(() => {
                 const canvas = document.querySelector('#game_frame canvas');
