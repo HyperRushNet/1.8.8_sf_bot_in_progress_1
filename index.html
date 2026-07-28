@@ -5,10 +5,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
     <link rel="icon" type="image/svg+xml" href="./game-assets/favicon.svg">
-    <title>HRN Client • BClient</title>
+    <title>HRN Client • BClient • OCR Bot</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
+    
+    <!-- Tesseract.js -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
     <script>
         (function () {
             "use strict";
@@ -265,15 +269,15 @@
             top: 70px;
             right: 12px;
             z-index: 30;
-            width: 260px;
-            max-height: 180px;
-            background: rgba(0, 0, 0, 0.7);
+            width: 340px;
+            max-height: 300px;
+            background: rgba(0, 0, 0, 0.85);
             backdrop-filter: blur(6px);
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 12px;
             padding: 8px 12px;
             overflow-y: auto;
-            font-size: 11px;
+            font-size: 10px;
             font-family: 'Menlo', 'Consolas', monospace;
             color: #b0d0ff;
             pointer-events: none;
@@ -290,8 +294,16 @@
         }
         #log-console .log-time {
             color: #888;
-            margin-right: 6px;
+            margin-right: 4px;
+            font-size: 9px;
         }
+        #log-console .log-debug { color: #66ccff; }
+        #log-console .log-ocr { color: #ffcc66; }
+        #log-console .log-success { color: #66ff88; }
+        #log-console .log-error { color: #ff6666; }
+        #log-console .log-step { color: #ff99ff; }
+        #log-console .log-farming { color: #88ddff; }
+        #log-console .log-reset { color: #ff8844; }
 
         #popup-container {
             position: fixed;
@@ -413,13 +425,6 @@
             width: 6%;
             height: 4%;
         }
-        .marker.orange {
-            border-color: #ff9800;
-            background: rgba(255, 152, 0, 0.20);
-            box-shadow: 0 0 20px #ff980066;
-            width: 8%;
-            height: 8%;
-        }
         .marker .dot {
             position: absolute;
             border-radius: 50%;
@@ -437,7 +442,13 @@
             background: #ab47bc;
             box-shadow: 0 0 24px #ab47bccc;
         }
-        #marker-red, #marker-purple {
+        .marker .dot.orange {
+            width: 14px;
+            height: 14px;
+            background: #ff9800;
+            box-shadow: 0 0 24px #ff9800cc;
+        }
+        #marker-red, #marker-purple, #marker-orange {
             width: 20px;
             height: 20px;
             background: transparent;
@@ -446,13 +457,13 @@
             cursor: grab;
             transform: translate(-50%, -50%);
         }
-        #marker-red .dot, #marker-purple .dot {
+        #marker-red .dot, #marker-purple .dot, #marker-orange .dot {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
         }
-        #marker-red:active, #marker-purple:active {
+        #marker-red:active, #marker-purple:active, #marker-orange:active {
             cursor: grabbing;
         }
 
@@ -553,6 +564,46 @@
             white-space: nowrap;
             pointer-events: none;
         }
+
+        #ocr-status {
+            position: fixed;
+            bottom: 130px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(4px);
+            padding: 4px 16px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-family: monospace;
+            color: #ffcc66;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: none;
+        }
+        #ocr-status.visible {
+            display: block;
+        }
+        
+        #farming-progress {
+            position: fixed;
+            bottom: 155px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            padding: 4px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-family: monospace;
+            color: #88ddff;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: none;
+        }
+        #farming-progress.visible {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -587,6 +638,8 @@
     <button id="toggle-ui-btn" title="Toggle UI">◻</button>
 
     <div id="log-console"></div>
+    <div id="ocr-status">🔍 OCR bezig...</div>
+    <div id="farming-progress">⏳ Farming 0/15 min</div>
 
     <div id="popup-container">
         <div id="popup-box">
@@ -601,11 +654,13 @@
         </div>
     </div>
 
+    <!-- 4 Markers -->
     <div class="marker green" id="marker-green" style="display:none; left:45%; top:45%;">
         <span class="marker-label">Server List</span>
     </div>
-    <div class="marker orange" id="marker-orange" style="display:none; left:45%; top:45%;">
-        <span class="marker-label">Disconnect Area</span>
+    <div class="marker" id="marker-orange" style="display:none; left:45%; top:45%;">
+        <div class="dot orange"></div>
+        <span class="marker-label" style="top:-22px;">Back to Server List</span>
     </div>
     <div class="marker" id="marker-red" style="display:none; left:50%; top:50%;">
         <div class="dot red"></div>
@@ -694,7 +749,7 @@
         })();
     </script>
 
-    <!-- BCLIENT SCRIPT -->
+    <!-- BCLIENT SCRIPT MET TESSERACT OCR -->
     <script>
         (function() {
             "use strict";
@@ -715,6 +770,8 @@
             const passInput = document.getElementById('pass-input');
             const overlay = document.getElementById('bclient-overlay');
             const startSelectieBtn = document.getElementById('start-selectie-btn');
+            const ocrStatus = document.getElementById('ocr-status');
+            const farmingProgress = document.getElementById('farming-progress');
 
             const markerGreen = document.getElementById('marker-green');
             const markerOrange = document.getElementById('marker-orange');
@@ -724,7 +781,7 @@
             let selectionState = {
                 step: 0,
                 serverListPos: null,
-                disconnectAreaPos: null,
+                backToServerListPos: null,
                 disconnectBtnPos: null,
                 survivalItemPos: null,
                 completed: false
@@ -735,15 +792,36 @@
             let currentStep = 0;
             let botRunning = false;
             let botStopRequested = false;
+            let ocrCheckCount = 0;
 
-            // LOG
-            function log(msg) {
+            // Tesseract worker
+            let ocrWorker = null;
+            let ocrReady = false;
+
+            // MINIMUM CONFIDENCE VOOR OCR (50%)
+            const MIN_CONFIDENCE = 50;
+
+            // Flag om te weten of we een reset hebben gedaan
+            let ocrTriggeredReset = false;
+
+            // LOG functies
+            function log(msg, type = '') {
                 const time = new Date().toLocaleTimeString();
                 const div = document.createElement('div');
-                div.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
+                const cls = type ? `log-${type}` : '';
+                div.innerHTML = `<span class="log-time">[${time}]</span> <span class="${cls}">${msg}</span>`;
                 logConsole.prepend(div);
-                if (logConsole.children.length > 80) logConsole.lastChild.remove();
+                if (logConsole.children.length > 150) logConsole.lastChild.remove();
+                console.log(`[${time}] ${msg}`);
             }
+
+            function logDebug(msg) { log('🔍 ' + msg, 'debug'); }
+            function logOCR(msg) { log('📖 ' + msg, 'ocr'); }
+            function logSuccess(msg) { log('✅ ' + msg, 'success'); }
+            function logError(msg) { log('❌ ' + msg, 'error'); }
+            function logStep(msg) { log('📍 ' + msg, 'step'); }
+            function logFarming(msg) { log('⏳ ' + msg, 'farming'); }
+            function logReset(msg) { log('🔄 ' + msg, 'reset'); }
 
             function setStatus(text) {
                 const span = statusBar.querySelector('span');
@@ -769,7 +847,7 @@
                 }
                 const labels = [
                     'Selecteer Server List',
-                    'Selecteer Disconnect Area',
+                    'Selecteer Back to Server List knop',
                     'Selecteer Disconnect knop',
                     'Selecteer Survival Item'
                 ];
@@ -779,7 +857,7 @@
                 isSelecting = true;
                 waitingForClick = false;
                 overlay.classList.add('active');
-                setStatus(`Stap ${step}/4: ${labels[step-1]}`);
+                setStatus(`Stap ${step}/${total}: ${labels[step-1]}`);
             }
 
             function hidePopup() {
@@ -790,7 +868,7 @@
 
             function startSelection() {
                 hideAllMarkers();
-                selectionState = { step:0, serverListPos:null, disconnectAreaPos:null, disconnectBtnPos:null, survivalItemPos:null, completed:false };
+                selectionState = { step:0, serverListPos:null, backToServerListPos:null, disconnectBtnPos:null, survivalItemPos:null, completed:false };
                 startBotBtn.disabled = true;
                 log('📋 Selectie gestart');
                 showPopup(1);
@@ -807,9 +885,9 @@
                         markerGreen.style.display = 'block';
                         break;
                     case 2: 
-                        selectionState.disconnectAreaPos = { ...defaultPos };
-                        markerOrange.style.left = '45%';
-                        markerOrange.style.top = '45%';
+                        selectionState.backToServerListPos = { ...defaultDot };
+                        markerOrange.style.left = '50%';
+                        markerOrange.style.top = '50%';
                         markerOrange.style.display = 'block';
                         break;
                     case 3: 
@@ -835,7 +913,7 @@
                     hidePopup();
                     setStatus('✅ Selectie compleet! Start de bot.');
                     startBotBtn.disabled = false;
-                    log('✅ Selectie compleet!');
+                    logSuccess('Selectie compleet!');
                     return;
                 }
                 const next = step + 1;
@@ -858,11 +936,11 @@
                         log(`📌 Server List op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
                         break;
                     case 2:
-                        selectionState.disconnectAreaPos = { x, y };
+                        selectionState.backToServerListPos = { x, y };
                         markerOrange.style.left = x + '%';
                         markerOrange.style.top = y + '%';
                         markerOrange.style.display = 'block';
-                        log(`📌 Disconnect Area op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
+                        log(`📌 Back to Server List op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
                         break;
                     case 3:
                         selectionState.disconnectBtnPos = { x, y };
@@ -891,12 +969,12 @@
             }
 
             function checkCompletion() {
-                if (selectionState.serverListPos && selectionState.disconnectAreaPos &&
+                if (selectionState.serverListPos && selectionState.backToServerListPos &&
                     selectionState.disconnectBtnPos && selectionState.survivalItemPos) {
                     selectionState.completed = true;
                     startBotBtn.disabled = false;
                     setStatus('✅ Selectie compleet! Start de bot.');
-                    log('✅ Alle markers zijn gezet');
+                    logSuccess('Alle markers zijn gezet');
                 }
             }
 
@@ -951,7 +1029,7 @@
                     let pos = { x: newLeftPct, y: newTopPct };
                     switch(id) {
                         case 'marker-green': selectionState.serverListPos = pos; break;
-                        case 'marker-orange': selectionState.disconnectAreaPos = pos; break;
+                        case 'marker-orange': selectionState.backToServerListPos = pos; break;
                         case 'marker-red': selectionState.disconnectBtnPos = pos; break;
                         case 'marker-purple': selectionState.survivalItemPos = pos; break;
                     }
@@ -981,7 +1059,532 @@
             makeDraggable(markerRed);
             makeDraggable(markerPurple);
 
-            // Event listeners
+            // ---- TESSERACT OCR FUNCTIES ----
+            async function initOCR() {
+                try {
+                    logDebug('Tesseract.js initialiseren...');
+                    ocrStatus.textContent = '🔍 OCR initialiseren...';
+                    ocrStatus.classList.add('visible');
+                    
+                    ocrWorker = await Tesseract.createWorker('eng');
+                    ocrReady = true;
+                    
+                    ocrStatus.textContent = '✅ OCR gereed';
+                    setTimeout(() => ocrStatus.classList.remove('visible'), 2000);
+                    logSuccess('Tesseract.js OCR geïnitialiseerd!');
+                    return true;
+                } catch (err) {
+                    logError('OCR init fout: ' + err.message);
+                    ocrStatus.classList.remove('visible');
+                    return false;
+                }
+            }
+
+            function getCanvas() {
+                const frame = document.getElementById('game_frame');
+                if (!frame) {
+                    logError('Game frame niet gevonden!');
+                    return null;
+                }
+                
+                const canvas = frame.querySelector('canvas');
+                if (!canvas) {
+                    logError('Canvas niet gevonden in game frame!');
+                    return null;
+                }
+                
+                if (canvas.width === 0 || canvas.height === 0) {
+                    logError(`Canvas heeft geen grootte: ${canvas.width}x${canvas.height}`);
+                    return null;
+                }
+                
+                return canvas;
+            }
+
+            function captureAndProcessCanvas(canvas) {
+                try {
+                    const offscreen = document.createElement('canvas');
+                    offscreen.width = canvas.width;
+                    offscreen.height = canvas.height;
+                    const ctx = offscreen.getContext('2d', { willReadFrequently: true });
+                    
+                    if (!ctx) {
+                        logError('Kan geen 2D context krijgen!');
+                        return null;
+                    }
+                    
+                    ctx.drawImage(canvas, 0, 0);
+                    
+                    const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
+                    const data = imageData.data;
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+                        if (brightness > 120) {
+                            data[i] = Math.min(255, data[i] + 50);
+                            data[i+1] = Math.min(255, data[i+1] + 50);
+                            data[i+2] = Math.min(255, data[i+2] + 50);
+                        } else {
+                            data[i] = Math.max(0, data[i] - 40);
+                            data[i+1] = Math.max(0, data[i+1] - 40);
+                            data[i+2] = Math.max(0, data[i+2] - 40);
+                        }
+                    }
+                    ctx.putImageData(imageData, 0, 0);
+                    
+                    return offscreen.toDataURL('image/png');
+                } catch (err) {
+                    logError('Capture fout: ' + err.message);
+                    return null;
+                }
+            }
+
+            async function performOCR() {
+                if (!ocrReady) {
+                    logDebug('OCR niet gereed, probeer te initialiseren...');
+                    await initOCR();
+                    if (!ocrReady) {
+                        logError('OCR nog steeds niet gereed');
+                        return { found: false, confidence: 0, text: '', debug: 'OCR niet gereed' };
+                    }
+                }
+
+                ocrCheckCount++;
+                logOCR(`📖 OCR scan #${ocrCheckCount} gestart...`);
+                ocrStatus.textContent = `🔍 OCR #${ocrCheckCount}...`;
+                ocrStatus.classList.add('visible');
+
+                try {
+                    const canvas = getCanvas();
+                    if (!canvas) {
+                        ocrStatus.classList.remove('visible');
+                        return { found: false, confidence: 0, text: '', debug: 'Geen canvas' };
+                    }
+
+                    const imageData = captureAndProcessCanvas(canvas);
+                    if (!imageData) {
+                        ocrStatus.classList.remove('visible');
+                        return { found: false, confidence: 0, text: '', debug: 'Geen image data' };
+                    }
+
+                    logDebug('Tesseract aan het lezen...');
+                    const startTime = Date.now();
+                    const result = await ocrWorker.recognize(imageData);
+                    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+                    
+                    const text = result.data.text || '';
+                    const confidence = result.data.confidence || 0;
+                    const words = result.data.words || [];
+                    
+                    logOCR(`OCR #${ocrCheckCount} voltooid in ${duration}s, ${words.length} woorden, confidence: ${confidence.toFixed(1)}%`);
+                    
+                    ocrStatus.classList.remove('visible');
+
+                    const searchText = text.toLowerCase();
+                    const targetPhrase = 'back to server list';
+                    const found = searchText.includes(targetPhrase);
+                    
+                    if (found) {
+                        logSuccess(`✅ "${targetPhrase}" gevonden! confidence: ${confidence.toFixed(1)}%`);
+                        return {
+                            found: true,
+                            confidence: confidence,
+                            text: text,
+                            debug: `Gevonden met ${confidence.toFixed(1)}% confidence`
+                        };
+                    } else {
+                        logDebug(`"${targetPhrase}" niet gevonden (confidence: ${confidence.toFixed(1)}%)`);
+                        return {
+                            found: false,
+                            confidence: confidence,
+                            text: text,
+                            debug: 'Tekst niet gevonden'
+                        };
+                    }
+
+                } catch (err) {
+                    logError('OCR fout: ' + err.message);
+                    ocrStatus.classList.remove('visible');
+                    return { found: false, confidence: 0, text: '', debug: err.message };
+                }
+            }
+
+            // ---- OCR CHECK FUNCTIE ----
+            // Geeft TRUE terug als er een reset moet gebeuren (OCR positief)
+            async function doOCRCheck(stepName) {
+                logStep(`📖 OCR check voor "${stepName}"...`);
+                const result = await performOCR();
+                
+                // Kijk of hij gevonden is EN confidence >= 50%
+                if (result.found && result.confidence >= MIN_CONFIDENCE) {
+                    logSuccess(`🎯 OCR geslaagd! confidence: ${result.confidence.toFixed(1)}% >= 50%`);
+                    
+                    // Klik op de "Back to server list" marker
+                    const btsl = selectionState.backToServerListPos;
+                    if (btsl) {
+                        const pos = getPixelPos(btsl);
+                        if (pos) {
+                            logSuccess(`📐 Klik op Back to Server List marker (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
+                            dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
+                            dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                            logDebug('⏳ Wacht 3s na klik...');
+                            await sleep(3000);
+                            logReset('🔄 OCR trigger! Herstart vanaf stap 1!');
+                            return true; // TRUE = reset nodig
+                        }
+                    } else {
+                        logError('❌ Back to Server List positie niet ingesteld!');
+                        return false;
+                    }
+                } else {
+                    const conf = result.confidence || 0;
+                    if (result.found) {
+                        logDebug(`⏭️ OCR gevonden maar confidence te laag: ${conf.toFixed(1)}% (min: 50%)`);
+                    } else {
+                        logDebug(`⏭️ OCR check gefaald (confidence: ${conf.toFixed(1)}%)`);
+                    }
+                    return false;
+                }
+                return false;
+            }
+
+            // ---- DISPATCH FUNCTIES ----
+            function dispatchMouseEvent(type, x, y, button=0) {
+                const canvas = document.querySelector('#game_frame canvas');
+                if (!canvas) {
+                    logError('Canvas niet gevonden voor mouse event!');
+                    return;
+                }
+                try {
+                    const rect = canvas.getBoundingClientRect();
+                    const clampedX = Math.max(rect.left, Math.min(rect.right, x));
+                    const clampedY = Math.max(rect.top, Math.min(rect.bottom, y));
+                    
+                    const ev = new MouseEvent(type, {
+                        clientX: clampedX,
+                        clientY: clampedY,
+                        button: button,
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    });
+                    canvas.dispatchEvent(ev);
+                    logDebug(`Mouse ${type} op (${clampedX.toFixed(0)}, ${clampedY.toFixed(0)}) button=${button}`);
+                } catch (err) {
+                    logError('Mouse event fout: ' + err.message);
+                }
+            }
+
+            function dispatchKeyEvent(type, key, code='') {
+                try {
+                    const ev = new KeyboardEvent(type, {
+                        key: key,
+                        code: code || key,
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    });
+                    document.dispatchEvent(ev);
+                    logDebug(`Key ${type}: ${key}`);
+                } catch (err) {
+                    logError('Key event fout: ' + err.message);
+                }
+            }
+
+            function getPixelPos(sel) {
+                if (!sel) return null;
+                const rect = overlay.getBoundingClientRect();
+                return {
+                    x: rect.left + (sel.x / 100) * rect.width,
+                    y: rect.top + (sel.y / 100) * rect.height
+                };
+            }
+
+            async function typeString(text, delayBetween=50) {
+                for (const char of text) {
+                    if (botStopRequested) break;
+                    let code = 'Key' + char.toUpperCase();
+                    if (char === '/') code = 'Slash';
+                    else if (char === ' ') code = 'Space';
+                    else if (char === '.') code = 'Period';
+                    else if (char === '@') code = 'Digit2';
+                    else if (char === '#') code = 'Digit3';
+                    else if (char === '!') code = 'Digit1';
+                    else if (char === '?') code = 'Slash';
+                    
+                    dispatchKeyEvent('keydown', char, code);
+                    dispatchKeyEvent('keyup', char, code);
+                    await sleep(delayBetween);
+                }
+            }
+
+            function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+            // ---- BOT LOOP ----
+            async function botLoop() {
+                if (botRunning) return;
+                botRunning = true;
+                botStopRequested = false;
+                stopBotBtn.style.display = 'inline-block';
+                startBotBtn.disabled = true;
+                logSuccess(`🤖 Bot gestart (Tesseract OCR - min 50% confidence)`);
+                let cycleCount = 0;
+                let resetFromOCR = false;
+
+                while (!botStopRequested) {
+                    // Als we een reset hebben van OCR, begin dan opnieuw
+                    if (resetFromOCR) {
+                        logReset('🔄 Reset door OCR trigger, begin opnieuw vanaf stap 1');
+                        resetFromOCR = false;
+                        // Ga naar de volgende iteratie om opnieuw te beginnen
+                        continue;
+                    }
+                    
+                    cycleCount++;
+                    ocrCheckCount = 0;
+                    log(`🔄 === CYCLE ${cycleCount} START ===`, 'debug');
+                    
+                    try {
+                        // === STAP 0: PRE-OCR CHECK ===
+                        const shouldReset = await doOCRCheck('Start cyclus');
+                        if (shouldReset) {
+                            resetFromOCR = true;
+                            continue;
+                        }
+
+                        // === STAP 1: Dubbelklik op server list ===
+                        logStep('📍 STAP 1: Dubbelklik op server list');
+                        const reset1 = await doOCRCheck('Voor dubbelklik');
+                        if (reset1) { resetFromOCR = true; continue; }
+                        
+                        const sl = selectionState.serverListPos;
+                        if (sl) {
+                            const pos = getPixelPos(sl);
+                            if (pos) {
+                                log(`📡 Dubbelklik op server list (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
+                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
+                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                                await sleep(150);
+                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
+                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                            }
+                        } else {
+                            logError('❌ Server list positie niet ingesteld!');
+                            break;
+                        }
+                        
+                        const reset2 = await doOCRCheck('Na dubbelklik');
+                        if (reset2) { resetFromOCR = true; continue; }
+                        
+                        // === STAP 2: Wacht 10-15 seconden ===
+                        const wait1 = 10000 + Math.floor(Math.random() * 5000);
+                        logFarming(`⏳ Wacht ${(wait1/1000).toFixed(0)}s na dubbelklik...`);
+                        for (let i = 0; i < Math.floor(wait1 / 1000); i++) {
+                            if (botStopRequested) break;
+                            if (i % 5 === 0) {
+                                const resetW = await doOCRCheck(`Wacht ${i}s`);
+                                if (resetW) { resetFromOCR = true; break; }
+                            }
+                            await sleep(1000);
+                        }
+                        if (resetFromOCR) continue;
+
+                        // === STAP 3: T indrukken ===
+                        logStep('📍 STAP 2: T indrukken');
+                        const reset3 = await doOCRCheck('Voor T');
+                        if (reset3) { resetFromOCR = true; continue; }
+                        dispatchKeyEvent('keydown', 't', 'KeyT');
+                        dispatchKeyEvent('keyup', 't', 'KeyT');
+                        log('⌨️ T ingedrukt');
+                        const reset4 = await doOCRCheck('Na T');
+                        if (reset4) { resetFromOCR = true; continue; }
+                        
+                        // === STAP 4: Wacht 5 seconden ===
+                        logFarming('⏳ Wacht 5s na T...');
+                        for (let i = 0; i < 5; i++) {
+                            if (botStopRequested) break;
+                            const resetW = await doOCRCheck(`Wacht ${i+1}/5s`);
+                            if (resetW) { resetFromOCR = true; break; }
+                            await sleep(1000);
+                        }
+                        if (resetFromOCR) continue;
+
+                        // === STAP 5: Type /login + wachtwoord ===
+                        logStep('📍 STAP 3: Typen /login');
+                        const reset5 = await doOCRCheck('Voor typen');
+                        if (reset5) { resetFromOCR = true; continue; }
+                        const pass = passInput.value || '<pass>';
+                        const cmd = '/login ' + pass;
+                        log(`⌨️ Typen: ${cmd}`);
+                        await typeString(cmd, 30);
+                        await sleep(500);
+                        const reset6 = await doOCRCheck('Na typen');
+                        if (reset6) { resetFromOCR = true; continue; }
+
+                        // === STAP 6: Enter ===
+                        logStep('📍 STAP 4: Enter');
+                        const reset7 = await doOCRCheck('Voor Enter');
+                        if (reset7) { resetFromOCR = true; continue; }
+                        dispatchKeyEvent('keydown', 'Enter', 'Enter');
+                        dispatchKeyEvent('keyup', 'Enter', 'Enter');
+                        log('⏎ Enter');
+                        const reset8 = await doOCRCheck('Na Enter');
+                        if (reset8) { resetFromOCR = true; continue; }
+                        
+                        // === STAP 7: Wacht 30 seconden ===
+                        logFarming('⏳ Wacht 30s tot login...');
+                        for (let i = 0; i < 30; i++) {
+                            if (botStopRequested) break;
+                            if (i % 5 === 0) {
+                                const resetW = await doOCRCheck(`Login wacht ${i}s`);
+                                if (resetW) { resetFromOCR = true; break; }
+                            }
+                            await sleep(1000);
+                        }
+                        if (resetFromOCR) continue;
+
+                        // === STAP 8: Rechtsklik op survival item ===
+                        logStep('📍 STAP 5: Rechtsklik op survival item');
+                        const reset9 = await doOCRCheck('Voor rechtsklik');
+                        if (reset9) { resetFromOCR = true; continue; }
+                        const si = selectionState.survivalItemPos;
+                        if (si) {
+                            const pos = getPixelPos(si);
+                            if (pos) {
+                                log(`🖱️ Rechtsklik op survival item (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
+                                dispatchMouseEvent('mousedown', pos.x, pos.y, 2);
+                                dispatchMouseEvent('mouseup', pos.x, pos.y, 2);
+                            }
+                        } else {
+                            logError('❌ Survival item positie niet ingesteld!');
+                            break;
+                        }
+                        const reset10 = await doOCRCheck('Na rechtsklik');
+                        if (reset10) { resetFromOCR = true; continue; }
+                        
+                        // === STAP 9: Wacht 5 seconden ===
+                        logFarming('⏳ Wacht 5s na rechtsklik...');
+                        for (let i = 0; i < 5; i++) {
+                            if (botStopRequested) break;
+                            const resetW = await doOCRCheck(`Wacht ${i+1}/5s na rechtsklik`);
+                            if (resetW) { resetFromOCR = true; break; }
+                            await sleep(1000);
+                        }
+                        if (resetFromOCR) continue;
+                        
+                        // === STAP 10: Linksklik op survival item ===
+                        logStep('📍 STAP 6: Linksklik op survival item');
+                        const reset11 = await doOCRCheck('Voor linksklik');
+                        if (reset11) { resetFromOCR = true; continue; }
+                        if (si) {
+                            const pos = getPixelPos(si);
+                            if (pos) {
+                                log(`🖱️ Linksklik op survival item (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
+                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
+                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                            }
+                        }
+                        const reset12 = await doOCRCheck('Na linksklik');
+                        if (reset12) { resetFromOCR = true; continue; }
+                        
+                        // === STAP 11: FARMEN - 15 MINUTEN ===
+                        logStep('📍 STAP 7: FARMEN - 15 minuten');
+                        farmingProgress.classList.add('visible');
+                        
+                        for (let minute = 0; minute < 15; minute++) {
+                            if (botStopRequested) break;
+                            const remaining = 15 - minute;
+                            farmingProgress.textContent = `⏳ Farming ${minute+1}/15 min (${remaining} min rest)`;
+                            logFarming(`⏳ Farming minuut ${minute+1}/15...`);
+                            
+                            const resetF = await doOCRCheck(`Farming minuut ${minute+1}`);
+                            if (resetF) { resetFromOCR = true; break; }
+                            
+                            for (let sec = 0; sec < 60; sec += 15) {
+                                if (botStopRequested) break;
+                                if (sec > 0) {
+                                    const resetFS = await doOCRCheck(`Farming ${minute+1}:${sec}s`);
+                                    if (resetFS) { resetFromOCR = true; break; }
+                                }
+                                await sleep(15000);
+                            }
+                            if (resetFromOCR) break;
+                        }
+                        
+                        farmingProgress.classList.remove('visible');
+                        if (resetFromOCR) continue;
+                        
+                        logSuccess(`✅ Farming voltooid!`);
+                        const reset13 = await doOCRCheck('Na farming');
+                        if (reset13) { resetFromOCR = true; continue; }
+                        
+                        // === STAP 12: Escape ===
+                        logStep('📍 STAP 8: Escape');
+                        const reset14 = await doOCRCheck('Voor Escape');
+                        if (reset14) { resetFromOCR = true; continue; }
+                        dispatchKeyEvent('keydown', 'Escape', 'Escape');
+                        dispatchKeyEvent('keyup', 'Escape', 'Escape');
+                        log('⎋ Escape');
+                        const reset15 = await doOCRCheck('Na Escape');
+                        if (reset15) { resetFromOCR = true; continue; }
+                        
+                        // === STAP 13: Wacht 5 seconden ===
+                        logFarming('⏳ Wacht 5s na Escape...');
+                        for (let i = 0; i < 5; i++) {
+                            if (botStopRequested) break;
+                            const resetW = await doOCRCheck(`Wacht ${i+1}/5s na Escape`);
+                            if (resetW) { resetFromOCR = true; break; }
+                            await sleep(1000);
+                        }
+                        if (resetFromOCR) continue;
+                        
+                        // === STAP 14: Disconnect ===
+                        logStep('📍 STAP 9: Disconnect');
+                        // GEEN OCR VOOR DISCONNECT - direct klikken op de marker
+                        const db = selectionState.disconnectBtnPos;
+                        if (db) {
+                            const pos = getPixelPos(db);
+                            if (pos) {
+                                log(`🔴 Disconnect op marker (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
+                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
+                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
+                            }
+                        } else {
+                            logError('❌ Disconnect knop positie niet ingesteld!');
+                            break;
+                        }
+                        
+                        // === STAP 15: Wacht 10 seconden ===
+                        logFarming('⏳ Wacht 10s voor volgende cyclus...');
+                        for (let i = 0; i < 10; i++) {
+                            if (botStopRequested) break;
+                            if (i % 3 === 0) {
+                                const resetW = await doOCRCheck(`Wacht ${i}s voor volgende cyclus`);
+                                if (resetW) { resetFromOCR = true; break; }
+                            }
+                            await sleep(1000);
+                        }
+                        if (resetFromOCR) continue;
+
+                        // GEEN OCR CHECK NA DISCONNECT - direct terug naar stap 1
+                        logSuccess(`🔄 === CYCLE ${cycleCount} VOLTOOID, ga terug naar stap 1 ===`);
+                        
+                    } catch (err) {
+                        logError('Fout in bot loop: ' + err.message);
+                        logDebug('⏳ Wacht 5s voor herstart...');
+                        await sleep(5000);
+                    }
+                }
+
+                botRunning = false;
+                stopBotBtn.style.display = 'none';
+                startBotBtn.disabled = false;
+                farmingProgress.classList.remove('visible');
+                ocrStatus.classList.remove('visible');
+                logSuccess(`⏹ Bot gestopt na ${cycleCount} cycles`);
+            }
+
+            // ---- EVENT LISTENERS ----
             startSelectieBtn.addEventListener('click', startSelection);
 
             popupSelect.addEventListener('click', () => {
@@ -990,6 +1593,7 @@
                 waitingForClick = true;
                 setStatus(`👆 Klik op het scherm (stap ${currentStep})`);
                 overlay.classList.add('active');
+                logDebug(`Wachten op klik voor stap ${currentStep}`);
             });
 
             popupSkip.addEventListener('click', () => {
@@ -1023,162 +1627,18 @@
                 document.body.classList.toggle('ui-hidden');
             });
 
-            // ---- BOT LOGIC ----
-            function dispatchMouseEvent(type, x, y, button=0) {
-                // Stuur event naar het canvas element
-                const canvas = document.querySelector('#game_frame canvas');
-                if (!canvas) {
-                    log('⚠️ Canvas niet gevonden!');
-                    return;
-                }
-                const ev = new MouseEvent(type, {
-                    clientX: x, clientY: y,
-                    button: button,
-                    bubbles: true,
-                    cancelable: true,
-                    view: window
-                });
-                canvas.dispatchEvent(ev);
-            }
-
-            function dispatchKeyEvent(type, key, code='') {
-                const ev = new KeyboardEvent(type, {
-                    key: key,
-                    code: code || key,
-                    bubbles: true,
-                    cancelable: true,
-                    view: window
-                });
-                document.dispatchEvent(ev);
-            }
-
-            async function typeString(text, delayBetween=50) {
-                for (const char of text) {
-                    if (botStopRequested) break;
-                    let code = 'Key' + char.toUpperCase();
-                    if (char === '/') code = 'Slash';
-                    else if (char === ' ') code = 'Space';
-                    else if (char === '.') code = 'Period';
-                    else if (char === '@') code = 'Digit2';
-                    else if (char === '#') code = 'Digit3';
-                    else if (char === '!') code = 'Digit1';
-                    else if (char === '?') code = 'Slash';
-                    
-                    dispatchKeyEvent('keydown', char, code);
-                    dispatchKeyEvent('keyup', char, code);
-                    await sleep(delayBetween);
-                }
-            }
-
-            function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-            function getPixelPos(sel) {
-                if (!sel) return null;
-                const rect = overlay.getBoundingClientRect();
-                return {
-                    x: rect.left + (sel.x / 100) * rect.width,
-                    y: rect.top + (sel.y / 100) * rect.height
-                };
-            }
-
-            async function botLoop() {
-                if (botRunning) return;
-                botRunning = true;
-                botStopRequested = false;
-                stopBotBtn.style.display = 'inline-block';
-                startBotBtn.disabled = true;
-                log('🤖 Bot gestart');
-
-                while (!botStopRequested) {
-                    try {
-                        // 1. Dubbelklik op server list
-                        const sl = selectionState.serverListPos;
-                        if (sl) {
-                            const pos = getPixelPos(sl);
-                            if (pos) {
-                                log(`📡 Dubbelklik op server list (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                await sleep(100);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                            }
-                        }
-                        await sleep(5000);
-
-                        // 2. T indrukken
-                        dispatchKeyEvent('keydown', 't', 'KeyT');
-                        dispatchKeyEvent('keyup', 't', 'KeyT');
-                        log('⌨️ T ingedrukt');
-                        await sleep(1000);
-
-                        // 3. Type /login
-                        const pass = passInput.value || '<pass>';
-                        const cmd = '/login ' + pass;
-                        log(`⌨️ Typen: ${cmd}`);
-                        await typeString(cmd, 30);
-                        await sleep(500);
-
-                        // 4. Enter
-                        dispatchKeyEvent('keydown', 'Enter', 'Enter');
-                        dispatchKeyEvent('keyup', 'Enter', 'Enter');
-                        log('⏎ Enter');
-                        await sleep(30000 + Math.floor(Math.random() * 5000));
-
-                        // 5. Rechtsklik
-                        const si = selectionState.survivalItemPos;
-                        if (si) {
-                            const pos = getPixelPos(si);
-                            if (pos) {
-                                log(`🖱️ Rechtsklik (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 2);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 2);
-                            }
-                        }
-                        await sleep(5000);
-
-                        // 6. Wacht
-                        const waitTime = 30000 + Math.floor(Math.random() * 30000);
-                        log(`⏳ Wacht ${(waitTime/1000).toFixed(0)}s`);
-                        await sleep(waitTime);
-
-                        // 7. Escape
-                        dispatchKeyEvent('keydown', 'Escape', 'Escape');
-                        dispatchKeyEvent('keyup', 'Escape', 'Escape');
-                        log('⎋ Escape');
-                        await sleep(3000);
-
-                        // 8. Disconnect
-                        const db = selectionState.disconnectBtnPos;
-                        if (db) {
-                            const pos = getPixelPos(db);
-                            if (pos) {
-                                log(`🔴 Disconnect (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                            }
-                        }
-                        await sleep(3000);
-
-                        if (botStopRequested) break;
-                    } catch (err) {
-                        log('❌ Fout: ' + err.message);
-                        await sleep(5000);
-                    }
-                }
-
-                botRunning = false;
-                stopBotBtn.style.display = 'none';
-                startBotBtn.disabled = false;
-                log('⏹ Bot gestopt');
-            }
-
-            startBotBtn.addEventListener('click', () => {
+            startBotBtn.addEventListener('click', async () => {
                 if (!selectionState.completed) {
-                    log('⚠️ Selecteer eerst alle stappen');
+                    logError('⚠️ Selecteer eerst alle stappen');
                     return;
                 }
                 if (botRunning) return;
+                
+                if (!ocrReady) {
+                    logDebug('OCR initialiseren...');
+                    await initOCR();
+                }
+                
                 botLoop();
             });
 
@@ -1187,9 +1647,46 @@
                 log('⏳ Stop aangevraagd...');
             });
 
+            // ---- TEST OCR ----
+            function testOCR() {
+                logDebug('📖 Handmatige OCR test...');
+                performOCR().then(result => {
+                    if (result.found) {
+                        logSuccess(`OCR test: "${result.text.substring(0, 50)}..." confidence: ${result.confidence.toFixed(1)}%`);
+                    } else {
+                        logDebug(`OCR test: geen resultaat (${result.debug})`);
+                    }
+                });
+            }
+
+            // ---- INIT ----
             checkCompletion();
-            log('🟢 BClient geladen');
+            log('🟢 BClient geladen met Tesseract.js OCR');
+            log(`🎯 Min confidence: ${MIN_CONFIDENCE}%`);
+            log(`📍 4 markers: Server List | Back to Server List | Disconnect | Survival Item`);
+            log(`🔄 Bij OCR trigger: klik op Back to Server List → reset naar stap 1`);
             setStatus('🔹 Klik op "Start Selectie" of sleep markers');
+            
+            setTimeout(() => {
+                initOCR();
+            }, 3000);
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'o' || e.key === 'O') {
+                    logDebug('🔍 Handmatige OCR test...');
+                    testOCR();
+                }
+            });
+            logDebug('💡 Druk op "O" voor handmatige OCR test');
+            
+            setTimeout(() => {
+                const canvas = document.querySelector('#game_frame canvas');
+                if (canvas) {
+                    logDebug(`Canvas gevonden: ${canvas.width}x${canvas.height}`);
+                } else {
+                    logDebug('Canvas nog niet gevonden, wacht...');
+                }
+            }, 5000);
         })();
     </script>
 
