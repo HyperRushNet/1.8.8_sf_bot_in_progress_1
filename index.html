@@ -1,1977 +1,2265 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <base href="https://cdn.jsdelivr.net/gh/zynq-platform/eaglercraft-hrn-client-1-8-8/">
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
-    <link rel="icon" type="image/svg+xml" href="./game-assets/favicon.svg">
-    <title>HRN Client • BClient • OCR Bot</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
-    
-    <!-- Tesseract.js -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    
-    <script>
-        (function () {
-            "use strict";
-            const urlParams = new URLSearchParams(window.location.search);
-            window.QUALITY = parseFloat(urlParams.get("q")) || 0.8;
-            try {
-                Object.defineProperty(window, "devicePixelRatio", {
-                    get: function () { return window.QUALITY; },
-                    set: function () {},
-                    configurable: false,
-                });
-                if (window.screen) {
-                    Object.defineProperty(window.screen, "devicePixelRatio", {
-                        get: function () { return window.QUALITY; },
-                        configurable: false,
-                    });
-                }
-            } catch (e) {}
-            var origGetContext = HTMLCanvasElement.prototype.getContext;
-            HTMLCanvasElement.prototype.getContext = function (type, attrs) {
-                if (type === "webgl" || type === "webgl2" || type === "experimental-webgl") {
-                    attrs = attrs || {};
-                    attrs.powerPreference = "high-performance";
-                    return origGetContext.call(this, type, attrs);
-                }
-                return origGetContext.call(this, type, attrs);
-            };
-            var isTabVisible = !document.hidden;
-            document.addEventListener("visibilitychange", () => isTabVisible = !document.hidden, true);
-            var origRAF = window.requestAnimationFrame;
-            window.requestAnimationFrame = function (callback) {
-                return origRAF(function (timestamp) {
-                    if (!isTabVisible) return;
-                    callback(timestamp);
-                });
-            };
-            ["contextmenu", "dragstart", "selectstart", "gesturestart", "gesturechange", "gestureend"]
-                .forEach(evt => document.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); }, true));
-        })();
-    </script>
-    <script src="lib/launcher.js"></script>
-    <script src="lib/util.js"></script>
-    <script src="lib/wispcraft.js"></script>
-    <script src="lib/largeEPK.js"></script>
-    <script src="lib/sha256.js"></script>
-    <script src="bootstrap.js"></script>
-
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body, html {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            font-family: "Inter", sans-serif;
-            background: #000;
-            color: #ffffff;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: none;
-        }
-
-        .bg-overlay {
-            background: url("./game-assets/background.jpg") no-repeat center center fixed;
-            background-size: cover;
-            position: fixed;
-            inset: 0;
-            z-index: 1;
-        }
-
-        #loading-container {
-            position: fixed;
-            inset: 0;
-            z-index: 10;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #loading-content, #error-popup {
-            width: 380px;
-            text-align: center;
-            background: rgba(0, 0, 0, 0.55);
-            padding: 45px 50px;
-            border-radius: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        #action-block {
-            font-size: 26px;
-            font-weight: 600;
-            letter-spacing: 1px;
-            margin-bottom: 6px;
-        }
-
-        #context-block {
-            font-size: 15px;
-            color: #bbb;
-            margin-bottom: 32px;
-        }
-
-        #progress-bar-container {
-            width: 320px;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 0 auto;
-        }
-
-        #progress-bar {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #722ed1, #b37feb);
-        }
-
-        #progress-text {
-            margin-top: 14px;
-            font-size: 14.5px;
-            font-weight: 500;
-            color: rgba(255, 255, 255, 0.85);
-        }
-
-        #game_frame {
-            position: fixed;
-            inset: 0;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 5;
-            contain: strict;
-        }
-
-        #game_frame canvas {
-            width: 100% !important;
-            height: 100% !important;
-            display: block;
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-        }
-
-        #error-popup {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 100;
-        }
-
-        #error-popup h3 {
-            color: #ff453a;
-            margin-bottom: 12px;
-            font-size: 22px;
-        }
-
-        #error-message {
-            color: #ddd;
-            line-height: 1.5;
-        }
-
-        #reload-btn {
-            background: #0071e3;
-            color: white;
-            border: none;
-            padding: 13px 28px;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 15px;
-            cursor: pointer;
-            margin-top: 22px;
-        }
-
-        /* BCLIENT STYLES */
-        #bclient-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 20;
-            pointer-events: none;
-        }
-        #bclient-overlay.active {
-            pointer-events: auto;
-        }
-
-        #status-bar {
-            position: fixed;
-            top: 12px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 30;
-            background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(6px);
-            padding: 6px 20px;
-            border-radius: 40px;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            font-size: 14px;
-            font-weight: 500;
-            color: #f0f0f0;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.6);
-            pointer-events: none;
-            transition: opacity 0.2s;
-            white-space: nowrap;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        #status-bar.hidden {
-            opacity: 0;
-        }
-        #status-bar button {
-            background: #7b61ff;
-            border: none;
-            color: #fff;
-            padding: 3px 14px;
-            border-radius: 30px;
-            font-weight: 600;
-            font-size: 12px;
-            cursor: pointer;
-            pointer-events: auto;
-            transition: 0.15s;
-        }
-        #status-bar button:hover {
-            background: #6a4ee0;
-        }
-
-        #toggle-ui-btn {
-            position: fixed;
-            top: 14px;
-            left: 14px;
-            z-index: 35;
-            background: rgba(20, 20, 30, 0.8);
-            backdrop-filter: blur(4px);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: #fff;
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
-            font-size: 18px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: 0.2s;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        }
-        #toggle-ui-btn:hover {
-            background: rgba(60, 60, 80, 0.9);
-        }
-
-        #log-console {
-            position: fixed;
-            top: 70px;
-            right: 12px;
-            z-index: 30;
-            width: 380px;
-            max-height: 350px;
-            background: rgba(0, 0, 0, 0.88);
-            backdrop-filter: blur(6px);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            padding: 8px 12px;
-            overflow-y: auto;
-            font-size: 10px;
-            font-family: 'Menlo', 'Consolas', monospace;
-            color: #b0d0ff;
-            pointer-events: none;
-            transition: opacity 0.2s;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-        }
-        #log-console.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        #log-console div {
-            padding: 2px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
-        }
-        #log-console .log-time {
-            color: #888;
-            margin-right: 4px;
-            font-size: 9px;
-        }
-        #log-console .log-debug { color: #66ccff; }
-        #log-console .log-ocr { color: #ffcc66; }
-        #log-console .log-success { color: #66ff88; }
-        #log-console .log-error { color: #ff6666; }
-        #log-console .log-step { color: #ff99ff; }
-        #log-console .log-farming { color: #88ddff; }
-        #log-console .log-reset { color: #ff8844; }
-        #log-console .log-process { color: #ff77aa; }
-        #log-console .log-storage { color: #66ddff; }
-
-        #popup-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 40;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            pointer-events: auto;
-            background: rgba(0,0,0,0.3);
-            backdrop-filter: blur(2px);
-        }
-        #popup-container.visible {
-            display: flex;
-        }
-        #popup-box {
-            background: #1a1a24;
-            border-radius: 24px;
-            padding: 28px 32px 24px;
-            max-width: 360px;
-            width: 90%;
-            border: 1px solid rgba(255,255,255,0.08);
-            box-shadow: 0 30px 60px rgba(0,0,0,0.8);
-            text-align: center;
-            pointer-events: auto;
-        }
-        #popup-box .dots {
-            display: flex;
-            justify-content: center;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        #popup-box .dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #3a3a4a;
-            transition: 0.2s;
-        }
-        #popup-box .dot.active {
-            background: #7b61ff;
-            box-shadow: 0 0 12px #7b61ff88;
-        }
-        #popup-box .dot.done {
-            background: #4caf50;
-        }
-        #popup-box h3 {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-        #popup-box .step-desc {
-            color: #aaa;
-            font-size: 14px;
-            margin-bottom: 18px;
-        }
-        #popup-box .btn-group {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        #popup-box .btn-group button {
-            background: #2a2a3a;
-            border: none;
-            color: #fff;
-            padding: 8px 18px;
-            border-radius: 30px;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            transition: 0.15s;
-            border: 1px solid transparent;
-            flex: 1 0 auto;
-            min-width: 70px;
-        }
-        #popup-box .btn-group button:hover {
-            background: #3d3d55;
-        }
-        #popup-box .btn-group .primary {
-            background: #7b61ff;
-            color: #fff;
-        }
-        #popup-box .btn-group .primary:hover {
-            background: #6a4ee0;
-        }
-        #popup-box .btn-group .secondary {
-            background: #3a3a4a;
-        }
-        #popup-box .btn-group .danger {
-            background: #b33a4a;
-        }
-        #popup-box .btn-group .danger:hover {
-            background: #a02e3e;
-        }
-
-        .marker {
-            position: fixed;
-            pointer-events: auto;
-            z-index: 25;
-            border: 2px solid transparent;
-            border-radius: 4px;
-            touch-action: none;
-            cursor: grab;
-            min-width: 20px;
-            min-height: 20px;
-            transform: translate(-50%, -50%);
-        }
-        .marker:active {
-            cursor: grabbing;
-        }
-        .marker.green {
-            border-color: #4caf50;
-            background: rgba(76, 175, 80, 0.25);
-            box-shadow: 0 0 16px #4caf5088;
-            width: 6%;
-            height: 4%;
-        }
-        .marker .dot {
-            position: absolute;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-        }
-        .marker .dot.red {
-            width: 12px;
-            height: 12px;
-            background: #f44336;
-            box-shadow: 0 0 20px #f44336cc;
-        }
-        .marker .dot.purple {
-            width: 14px;
-            height: 14px;
-            background: #ab47bc;
-            box-shadow: 0 0 24px #ab47bccc;
-        }
-        .marker .dot.orange {
-            width: 14px;
-            height: 14px;
-            background: #ff9800;
-            box-shadow: 0 0 24px #ff9800cc;
-        }
-        .marker .dot.cyan {
-            width: 14px;
-            height: 14px;
-            background: #00bcd4;
-            box-shadow: 0 0 24px #00bcd4cc;
-        }
-        #marker-red, #marker-purple, #marker-orange, #marker-cyan {
-            width: 20px;
-            height: 20px;
-            background: transparent;
-            border: none;
-            pointer-events: auto;
-            cursor: grab;
-            transform: translate(-50%, -50%);
-        }
-        #marker-red .dot, #marker-purple .dot, #marker-orange .dot, #marker-cyan .dot {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
-        #marker-red:active, #marker-purple:active, #marker-orange:active, #marker-cyan:active {
-            cursor: grabbing;
-        }
-
-        #password-area {
-            position: fixed;
-            bottom: 16px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 30;
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(4px);
-            padding: 6px 14px 6px 16px;
-            border-radius: 30px;
-            border: 1px solid rgba(255,255,255,0.08);
-            pointer-events: auto;
-        }
-        #password-area label {
-            font-size: 12px;
-            color: #ccc;
-            font-weight: 500;
-        }
-        #password-area input {
-            background: #1e1e2a;
-            border: 1px solid #3a3a4e;
-            border-radius: 30px;
-            padding: 4px 12px;
-            color: #fff;
-            font-size: 13px;
-            width: 120px;
-            outline: none;
-            font-family: inherit;
-        }
-        #password-area input:focus {
-            border-color: #7b61ff;
-        }
-        #start-bot-btn, #stop-bot-btn {
-            background: #4caf50;
-            border: none;
-            color: #fff;
-            font-weight: 600;
-            padding: 5px 14px;
-            border-radius: 30px;
-            font-size: 13px;
-            cursor: pointer;
-            transition: 0.15s;
-            pointer-events: auto;
-        }
-        #start-bot-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-        #start-bot-btn:hover:not(:disabled) {
-            background: #43a047;
-        }
-        #stop-bot-btn {
-            background: #b33a4a;
-            display: none;
-        }
-        #stop-bot-btn:hover {
-            background: #a02e3e;
-        }
-
-        .ui-hidden #status-bar,
-        .ui-hidden #log-console,
-        .ui-hidden #password-area,
-        .ui-hidden #toggle-ui-btn,
-        .ui-hidden .marker {
-            display: none !important;
-        }
-        .ui-hidden #popup-container {
-            display: none !important;
-        }
-
-        #log-console::-webkit-scrollbar {
-            width: 3px;
-        }
-        #log-console::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        #log-console::-webkit-scrollbar-thumb {
-            background: #555;
-            border-radius: 4px;
-        }
-
-        .marker-label {
-            position: absolute;
-            top: -18px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 9px;
-            background: rgba(0,0,0,0.7);
-            padding: 1px 6px;
-            border-radius: 8px;
-            color: #ddd;
-            white-space: nowrap;
-            pointer-events: none;
-        }
-
-        #ocr-status {
-            position: fixed;
-            bottom: 130px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 30;
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(4px);
-            padding: 4px 16px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-family: monospace;
-            color: #ffcc66;
-            border: 1px solid rgba(255,255,255,0.1);
-            display: none;
-        }
-        #ocr-status.visible {
-            display: block;
-        }
-        
-        #farming-progress {
-            position: fixed;
-            bottom: 155px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 30;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(4px);
-            padding: 4px 16px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-family: monospace;
-            color: #88ddff;
-            border: 1px solid rgba(255,255,255,0.1);
-            display: none;
-        }
-        #farming-progress.visible {
-            display: block;
-        }
-
-        #load-storage-btn {
-            position: fixed;
-            bottom: 200px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 30;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(4px);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: #fff;
-            padding: 4px 16px;
-            border-radius: 30px;
-            font-size: 11px;
-            cursor: pointer;
-            display: none;
-            font-family: inherit;
-        }
-        #load-storage-btn.visible {
-            display: block;
-        }
-        #load-storage-btn:hover {
-            background: rgba(60,60,80,0.8);
-        }
-    </style>
+<base href="https://cdn.jsdelivr.net/gh/hyperrushnet/1.8.8_sf_bot_in_progress_1/">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+<link rel="icon" type="image/svg+xml" href="./game-assets/favicon.svg">
+<title>BClient</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+(function(){const e=new URLSearchParams(window.location.search);window.QUALITY=parseFloat(e.get("q"))||.8;try{Object.defineProperty(window,"devicePixelRatio",{get:function(){return window.QUALITY},set:function(){},configurable:!1});window.screen&&Object.defineProperty(window.screen,"devicePixelRatio",{get:function(){return window.QUALITY},configurable:!1})}catch(e){}var t=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(e,a){return e==="webgl"||e==="webgl2"||e==="experimental-webgl"?(a=a||{},a.powerPreference="high-performance",t.call(this,e,a)):t.call(this,e,a)};var a=!document.hidden;document.addEventListener("visibilitychange",()=>a=!document.hidden,!0);var n=window.requestAnimationFrame;window.requestAnimationFrame=function(e){return n(function(t){if(!a)return;e(t)})};["contextmenu","dragstart","selectstart","gesturestart","gesturechange","gestureend"].forEach(e=>document.addEventListener(e,e=>{e.preventDefault();e.stopPropagation()},!0))})();
+</script>
+<script src="lib/launcher.js"></script>
+<script src="lib/util.js"></script>
+<script src="lib/wispcraft.js"></script>
+<script src="lib/largeEPK.js"></script>
+<script src="lib/sha256.js"></script>
+<script src="bootstrap.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body,html{width:100%;height:100%;overflow:hidden;font-family:"Inter",sans-serif;background:#000;color:#fff;user-select:none;-webkit-user-select:none;touch-action:none}.bg-overlay{background:url("./game-assets/neon-bot-ck.jpg")no-repeat center center fixed;background-size:cover;position:fixed;inset:0;z-index:1}#loading-container{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center}#loading-content,#error-popup{width:380px;text-align:center;background:rgba(0,0,0,.6);padding:45px 50px;border-radius:24px;border:1px solid rgba(255,255,255,.08)}#action-block{font-size:26px;font-weight:600;letter-spacing:1px;margin-bottom:6px}#context-block{font-size:15px;color:#bbb;margin-bottom:32px}#progress-bar-container{width:320px;height:6px;background:rgba(255,255,255,.08);border-radius:10px;overflow:hidden;margin:0 auto}#progress-bar{height:100%;width:0%;background:linear-gradient(90deg,#722ed1,#b37feb)}#progress-text{margin-top:14px;font-size:14.5px;font-weight:500;color:rgba(255,255,255,.85)}#game_frame{position:fixed;inset:0;width:100%!important;height:100%!important;z-index:5;contain:strict}#game_frame canvas{width:100%!important;height:100%!important;display:block;image-rendering:pixelated;image-rendering:crisp-edges}#error-popup{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:100}#error-popup h3{color:#ff453a;margin-bottom:12px;font-size:22px}#error-message{color:#ddd;line-height:1.5}#reload-btn{background:#0071e3;color:#fff;border:0;padding:13px 28px;border-radius:10px;font-weight:600;font-size:15px;cursor:pointer;margin-top:22px}
+#dashboard{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(10,10,18,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.07);padding:6px 14px;display:flex;align-items:center;justify-content:space-between;height:38px;font-size:11px;font-family:"Inter",sans-serif;pointer-events:none}#dashboard *{pointer-events:auto}.dash-left{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;overflow:hidden}.dash-right{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}.dash-title{font-weight:700;font-size:13px;color:#7b61ff;letter-spacing:.3px;white-space:nowrap}.dash-title span{color:#555;font-weight:400;font-size:9px;margin-left:3px}.dash-stat{display:flex;align-items:center;gap:3px;color:#666;font-size:9px;white-space:nowrap}.dash-stat .label{color:#444;text-transform:uppercase;font-size:7px;letter-spacing:.3px;font-weight:600}.dash-stat .value{color:#eee;font-weight:600;font-size:10px;min-width:14px}.dash-stat .value.green{color:#4caf50}.dash-stat .value.yellow{color:#ffcc66}.dash-stat .value.red{color:#ff6666}.dash-stat .value.cyan{color:#66ddff}.dash-status{padding:1px 8px;border-radius:10px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}.dash-status.idle{background:#1a1a2a;color:#555}.dash-status.running{background:#1a3a2a;color:#4caf50}.dash-status.paused{background:#3a2a1a;color:#ffcc66}.dash-status.error{background:#3a1a1a;color:#ff6666}.dash-status.ocr{background:#1a2a3a;color:#66ddff}.dash-btn{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);color:#999;padding:2px 8px;border-radius:4px;font-size:8px;font-weight:600;cursor:pointer;font-family:"Inter",sans-serif;transition:all .15s;white-space:nowrap;height:22px;letter-spacing:.2px}.dash-btn:hover{background:rgba(255,255,255,.1);color:#fff}.dash-btn.primary{background:#7b61ff;border-color:#7b61ff;color:#fff}.dash-btn.primary:hover{background:#6a4ee0}.dash-btn.primary:disabled{opacity:.25;cursor:not-allowed}.dash-btn.danger{background:#b33a4a;border-color:#b33a4a;color:#fff}.dash-btn.danger:hover{background:#a02e3e}.dash-btn.pointer-lock{background:rgba(123,97,255,.12);border-color:rgba(123,97,255,.18);color:#7b61ff}.dash-btn.pointer-lock:hover{background:rgba(123,97,255,.22)}.dash-btn.calibrate{background:rgba(255,152,0,.12);border-color:rgba(255,152,0,.18);color:#ff9800}.dash-btn.calibrate:hover{background:rgba(255,152,0,.22)}.dash-btn.password{background:rgba(76,175,80,.12);border-color:rgba(76,175,80,.18);color:#4caf50}.dash-btn.password:hover{background:rgba(76,175,80,.22)}.dash-btn.legend-toggle{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.06);color:#666}.dash-btn.legend-toggle:hover{background:rgba(255,255,255,.08);color:#aaa}
+.legend-container{position:fixed;top:44px;right:10px;z-index:45;background:rgba(10,10,18,.92);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:8px 12px;min-width:150px;display:none;box-shadow:0 8px 32px rgba(0,0,0,.6)}.legend-container.visible{display:block}.legend-item{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:10px;color:#aaa;font-weight:500;border-bottom:1px solid rgba(255,255,255,.03)}.legend-item:last-child{border-bottom:none}.legend-item .swatch{width:10px;height:10px;border-radius:50%;border:1px solid rgba(255,255,255,.06);flex-shrink:0}.legend-item .swatch.green{background:#4caf50}.legend-item .swatch.yellow{background:#ffeb3b}.legend-item .swatch.orange{background:#ff9800}.legend-item .swatch.red{background:#f44336}.legend-item .swatch.purple{background:#ab47bc}.legend-item .swatch.cyan{background:#00bcd4}.legend-item .name{color:#888}.legend-item .abbr{color:#444;font-size:8px;margin-left:auto}
+#status-bar{position:fixed;top:44px;left:50%;transform:translateX(-50%);z-index:30;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);padding:2px 16px;border-radius:16px;border:1px solid rgba(255,255,255,.04);font-size:10px;font-weight:500;color:#666;box-shadow:0 4px 20px rgba(0,0,0,.2);pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:6px}#status-bar .status-dot{width:5px;height:5px;border-radius:50%;display:inline-block}#status-bar .status-dot.green{background:#4caf50}#status-bar .status-dot.yellow{background:#ffcc66}#status-bar .status-dot.red{background:#ff6666}#status-bar .status-dot.blue{background:#66ddff}#status-bar .status-dot.grey{background:#333}
+#log-console{position:fixed;top:50px;right:10px;z-index:30;width:240px;max-height:120px;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.03);border-radius:4px;padding:3px 6px;overflow-y:auto;font-size:8px;font-family:'Menlo','Consolas',monospace;color:#555;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.2)}#log-console div{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.02);line-height:1.2}#log-console .log-time{color:#2a2a2a;margin-right:3px;font-size:7px}#log-console .log-info{color:#666}#log-console .log-ok{color:#4caf50}#log-console .log-warn{color:#ffcc66}#log-console .log-err{color:#ff6666}#log-console .log-debug{color:#66ddff}#log-console .log-step{color:#aa88ff}#log-console .log-ocr{color:#ff8844}#log-console::-webkit-scrollbar{width:2px}#log-console::-webkit-scrollbar-track{background:0 0}#log-console::-webkit-scrollbar-thumb{background:#222;border-radius:2px}
+.marker{position:fixed;pointer-events:auto;z-index:25;touch-action:none;cursor:grab;width:18px;height:18px;transform:translate(-50%,-50%);transition:transform .15s,box-shadow .15s}.marker:active{cursor:grabbing;transform:translate(-50%,-50%) scale(1.15)}.marker .dot{width:100%;height:100%;border-radius:50%;border:2px solid rgba(255,255,255,.1);box-shadow:0 0 20px rgba(0,0,0,.4);transition:.15s}.marker .dot.green{background:#4caf50;box-shadow:0 0 24px rgba(76,175,80,.2)}.marker .dot.yellow{background:#ffeb3b;box-shadow:0 0 24px rgba(255,235,59,.2)}.marker .dot.orange{background:#ff9800;box-shadow:0 0 24px rgba(255,152,0,.2)}.marker .dot.red{background:#f44336;width:14px;height:14px;margin:2px;box-shadow:0 0 24px rgba(244,67,54,.25)}.marker .dot.purple{background:#ab47bc;width:16px;height:16px;margin:1px;box-shadow:0 0 24px rgba(171,71,188,.25)}.marker .dot.cyan{background:#00bcd4;width:16px;height:16px;margin:1px;box-shadow:0 0 24px rgba(0,188,212,.25)}
+#tab-overlay{position:fixed;inset:0;z-index:55;background:rgba(0,0,0,.75);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}#tab-overlay.visible{display:flex}#tab-overlay h2{color:#ff8844;font-size:20px;font-weight:600}#tab-overlay p{color:#888;font-size:14px}#tab-overlay .icon{font-size:48px}
+#toggle-ui-btn,#bclient-overlay,#password-area,#popup-container,#ocr-status,#farming-progress,#load-storage-btn,#tab-warning{display:none!important}
+</style>
 </head>
 <body>
+<div id="game_frame"></div>
+<div class="bg-overlay"></div>
+<div id="loading-container"><div id="loading-content"><h2 id="action-block">BClient</h2><h2 id="context-block">Loading...</h2><div id="progress-bar-container"><div id="progress-bar"></div></div><div id="progress-text">0%</div></div></div>
+<div id="error-popup"><h3>Connection Error</h3><p id="error-message">Missing assets or no internet connection.</p><button id="reload-btn" onclick="location.reload()">Try Again</button></div>
 
-    <div id="game_frame"></div>
-    <div class="bg-overlay"></div>
+<div id="dashboard">
+<div class="dash-left">
+<div class="dash-title">BCLIENT <span>v2.0</span></div>
+<div class="dash-stat"><span class="label">State</span><span class="dash-status idle" id="dashState">Idle</span></div>
+<div class="dash-stat"><span class="label">Cycle</span><span class="value" id="dashCycle">0</span></div>
+<div class="dash-stat"><span class="label">OCR</span><span class="value" id="dashOCR">0</span></div>
+<div class="dash-stat"><span class="label">Conf</span><span class="value yellow" id="dashConf">-</span></div>
+<div class="dash-stat"><span class="label">Chat</span><span class="value" id="dashChat" style="color:#66ddff;">Closed</span></div>
+</div>
+<div class="dash-right">
+<button class="dash-btn legend-toggle" id="legendToggle">Legend</button>
+<button class="dash-btn password" id="dashPassBtn">Key</button>
+<button class="dash-btn calibrate" id="dashCalibrateBtn">Calibrate</button>
+<button class="dash-btn primary" id="dashStartBtn" disabled>Start</button>
+<button class="dash-btn danger" id="dashStopBtn" style="display:none;">Stop</button>
+<button class="dash-btn pointer-lock" id="dashPointerBtn">Lock</button>
+<button class="dash-btn" id="dashSaveBtn">Save</button>
+<button class="dash-btn" id="dashLoadBtn">Load</button>
+</div>
+</div>
 
-    <div id="loading-container">
-        <div id="loading-content">
-            <h2 id="action-block">HRN Client</h2>
-            <h2 id="context-block">Loading...</h2>
-            <div id="progress-bar-container">
-                <div id="progress-bar"></div>
-            </div>
-            <div id="progress-text">0%</div>
-        </div>
-    </div>
+<div id="legend-container" class="legend-container">
+<div class="legend-item"><span class="swatch green"></span><span class="name">Server List</span><span class="abbr">SL</span></div>
+<div class="legend-item"><span class="swatch yellow"></span><span class="name">Multiplayer</span><span class="abbr">MP</span></div>
+<div class="legend-item"><span class="swatch orange"></span><span class="name">Back to Server List</span><span class="abbr">BS</span></div>
+<div class="legend-item"><span class="swatch red"></span><span class="name">Disconnect</span><span class="abbr">DC</span></div>
+<div class="legend-item"><span class="swatch purple"></span><span class="name">Survival Item</span><span class="abbr">SI</span></div>
+<div class="legend-item"><span class="swatch cyan"></span><span class="name">Back to Game</span><span class="abbr">BG</span></div>
+</div>
 
-    <div id="error-popup">
-        <h3>Connection Error</h3>
-        <p id="error-message">Missing assets or no internet connection.</p>
-        <button id="reload-btn" onclick="location.reload()">Try Again</button>
-    </div>
+<div id="status-bar"><span class="status-dot grey" id="statusDot"></span><span id="statusText">Ready</span></div>
+<div id="log-console"></div>
+<div id="tab-overlay"><div class="icon">⏸</div><h2>Tab Inactive</h2><p>Everything is paused. Return to this tab to continue.</p></div>
 
-    <div id="bclient-overlay"></div>
+<div id="calibration-popup"><div id="calibration-box"><div class="dots" id="calDots"></div><h3 id="calTitle">Step 1/6</h3><div class="step-desc" id="calDesc">Click on Server List</div><div class="btn-row"><button class="primary" id="calSelect">Select</button><button id="calSkip">Skip</button><button class="danger" id="calCancel">Cancel</button></div></div></div>
 
-    <div id="status-bar">
-        <span>🔹 Klik op "Start Selectie"</span>
-        <button id="start-selectie-btn">▶ Start</button>
-    </div>
+<div class="marker" id="marker-green" style="display:none;left:45%;top:45%;"><div class="dot green"></div></div>
+<div class="marker" id="marker-yellow" style="display:none;left:45%;top:45%;"><div class="dot yellow"></div></div>
+<div class="marker" id="marker-orange" style="display:none;left:45%;top:45%;"><div class="dot orange"></div></div>
+<div class="marker" id="marker-red" style="display:none;left:50%;top:50%;"><div class="dot red"></div></div>
+<div class="marker" id="marker-purple" style="display:none;left:50%;top:50%;"><div class="dot purple"></div></div>
+<div class="marker" id="marker-cyan" style="display:none;left:50%;top:50%;"><div class="dot cyan"></div></div>
 
-    <button id="toggle-ui-btn" title="Toggle UI">◻</button>
+<script>
+(function() {
+  window.updateProgress = function(percent) {
+    var rounded = Math.min(Math.round(percent || 0), 100);
+    var bar = document.getElementById("progress-bar");
+    var text = document.getElementById("progress-text");
+    if (bar) bar.style.width = rounded + "%";
+    if (text) text.textContent = rounded + "%";
+  };
 
-    <div id="log-console"></div>
-    <div id="ocr-status">🔍 OCR bezig...</div>
-    <div id="farming-progress">⏳ Farming 0/15 min</div>
-    <button id="load-storage-btn">💾 Laad opgeslagen posities</button>
+  function showErrorPopup(msg) {
+    var popup = document.getElementById("error-popup");
+    if (msg) document.getElementById("error-message").textContent = msg;
+    popup.style.display = "block";
+  }
 
-    <div id="popup-container">
-        <div id="popup-box">
-            <div class="dots" id="dots-container"></div>
-            <h3 id="popup-title">Stap 1/5</h3>
-            <div class="step-desc" id="popup-desc">Selecteer de Server List</div>
-            <div class="btn-group">
-                <button class="primary" id="popup-select">Selecteer</button>
-                <button class="secondary" id="popup-skip">Overslaan</button>
-                <button class="danger" id="popup-cancel">Annuleren</button>
-            </div>
-        </div>
-    </div>
+  function hideLoadingScreen() {
+    var loader = document.getElementById("loading-container");
+    if (loader) loader.style.display = "none";
+  }
 
-    <!-- 5 Markers -->
-    <div class="marker green" id="marker-green" style="display:none; left:45%; top:45%;">
-        <span class="marker-label">Server List</span>
-    </div>
-    <div class="marker" id="marker-orange" style="display:none; left:45%; top:45%;">
-        <div class="dot orange"></div>
-        <span class="marker-label" style="top:-22px;">Back to Server List</span>
-    </div>
-    <div class="marker" id="marker-red" style="display:none; left:50%; top:50%;">
-        <div class="dot red"></div>
-        <span class="marker-label" style="top:-22px;">Disconnect</span>
-    </div>
-    <div class="marker" id="marker-purple" style="display:none; left:50%; top:50%;">
-        <div class="dot purple"></div>
-        <span class="marker-label" style="top:-22px;">Survival Item</span>
-    </div>
-    <div class="marker" id="marker-cyan" style="display:none; left:50%; top:50%;">
-        <div class="dot cyan"></div>
-        <span class="marker-label" style="top:-22px;">Back to Game</span>
-    </div>
+  window.addEventListener("load", async function() {
+    try {
+      if ("serviceWorker" in navigator) {
+        try {
+          await navigator.serviceWorker.register("sw.js");
+        } catch (e) {}
+      }
 
-    <div id="password-area">
-        <label for="pass-input">🔑</label>
-        <input type="text" id="pass-input" value="<pass>" placeholder="wachtwoord" />
-        <button id="start-bot-btn" disabled>▶ Start Bot</button>
-        <button id="stop-bot-btn">⏹ Stop</button>
-    </div>
+      var epk = await loadCachedAssetUI("./game-assets/meta.json", true, "1.8.8-wasm")
+        .catch(async function() {
+          return await loadCachedAssetUI("./game-assets/meta.json", true, "1.8.8-wasm");
+        });
 
-    <!-- ORIGINELE CLIENT SCRIPT -->
-    <script>
-        "use strict";
-        (function () {
-            window.updateProgress = function (percent) {
-                const rounded = Math.min(Math.round(percent || 0), 100);
-                const bar = document.getElementById("progress-bar");
-                const text = document.getElementById("progress-text");
-                if (bar) bar.style.width = rounded + "%";
-                if (text) text.textContent = rounded + "%";
-            };
+      var listResponse = await fetch("list.json");
+      var listData = await listResponse.json();
 
-            function showErrorPopup(msg) {
-                const popup = document.getElementById("error-popup");
-                if (msg) document.getElementById("error-message").textContent = msg;
-                popup.style.display = "block";
+      var params = {
+        demoMode: false,
+        localesURI: "lang/",
+        container: "game_frame",
+        assetsURI: epk,
+        worldsDB: "worlds",
+        ...listData
+      };
+
+      parseParams(params);
+      window.eaglercraftXOpts = params;
+
+      await new Promise(function(resolve) {
+        if (window["wispcraft-ServerReady"]) {
+          window["wispcraft-ServerReady"].then(resolve);
+        } else {
+          setTimeout(resolve, 800);
+        }
+      });
+
+      hideLoadingScreen();
+      main();
+
+      setTimeout(function() {
+        if (window.__eaglercraftXBlobURLs) {
+          window.__eaglercraftXBlobURLs.forEach(function(url) {
+            try { URL.revokeObjectURL(url); } catch (e) {}
+          });
+          window.__eaglercraftXBlobURLs.length = 0;
+        }
+      }, 15000);
+    } catch (err) {
+      console.error("Boot Error:", err);
+      showErrorPopup("Could not load game assets. Try again or check your internet.");
+    }
+  });
+})();
+
+(function() {
+  "use strict";
+
+  var D = document;
+
+  function g(id) {
+    return D.getElementById(id);
+  }
+
+  var dashState = g("dashState");
+  var dashCycle = g("dashCycle");
+  var dashOCR = g("dashOCR");
+  var dashConf = g("dashConf");
+  var dashChat = g("dashChat");
+  var dashStartBtn = g("dashStartBtn");
+  var dashStopBtn = g("dashStopBtn");
+  var dashPointerBtn = g("dashPointerBtn");
+  var dashSaveBtn = g("dashSaveBtn");
+  var dashLoadBtn = g("dashLoadBtn");
+  var dashPassBtn = g("dashPassBtn");
+  var dashCalibrateBtn = g("dashCalibrateBtn");
+  var legendToggle = g("legendToggle");
+  var legendContainer = g("legend-container");
+  var statusText = g("statusText");
+  var statusDot = g("statusDot");
+  var logConsole = g("log-console");
+  var calPopup = g("calibration-popup");
+  var calDots = g("calDots");
+  var calTitle = g("calTitle");
+  var calDesc = g("calDesc");
+  var calSelect = g("calSelect");
+  var calSkip = g("calSkip");
+  var calCancel = g("calCancel");
+  var tabOverlay = g("tab-overlay");
+
+  var markerGreen = g("marker-green");
+  var markerYellow = g("marker-yellow");
+  var markerOrange = g("marker-orange");
+  var markerRed = g("marker-red");
+  var markerPurple = g("marker-purple");
+  var markerCyan = g("marker-cyan");
+
+  var selectionState = {
+    serverListPos: null,
+    multiplayerPos: null,
+    backToServerListPos: null,
+    disconnectBtnPos: null,
+    survivalItemPos: null,
+    backToGamePos: null,
+    completed: false
+  };
+
+  var botRunning = false;
+  var botStopRequested = false;
+  var ocrCheckCount = 0;
+  var cycleCount = 0;
+  var lastConfidence = 0;
+
+  var ocrWorker = null;
+  var ocrReady = false;
+
+  var isChatOpen = false;
+  var isTypingPassword = false;
+  var isInDisconnectPhase = false;
+  var justPressedEscape = false;
+
+  var MIN_CONFIDENCE = 50;
+  var STORAGE_KEY = "bclient_marker_positions";
+  var serverPassword = localStorage.getItem("bclient_password") || "<pass>";
+
+  var isTabVisible = true;
+  var isBotPaused = false;
+
+  var isSelecting = false;
+  var waitingForClick = false;
+  var currentStep = 0;
+  var GLOBAL_DELAY = 500;
+
+  legendToggle.addEventListener("click", function() {
+    legendContainer.classList.toggle("visible");
+  });
+
+  document.addEventListener("visibilitychange", function() {
+    isTabVisible = !document.hidden;
+    if (!isTabVisible) {
+      isBotPaused = true;
+      tabOverlay.classList.add("visible");
+      setDashState("paused");
+      log("Tab hidden - ALL paused", "warn");
+      setStatus("Tab hidden - paused", "yellow");
+    } else {
+      isBotPaused = false;
+      tabOverlay.classList.remove("visible");
+      setDashState("running");
+      log("Tab visible - resuming", "info");
+      setStatus("Tab visible - resuming", "green");
+    }
+  });
+
+  function setDashState(state) {
+    var states = {
+      idle: "Idle",
+      running: "Running",
+      paused: "Paused",
+      error: "Error",
+      ocr: "OCR"
+    };
+    dashState.textContent = states[state] || state;
+    dashState.className = "dash-status " + state;
+  }
+
+  function setStatus(text, dotColor) {
+    statusText.textContent = text;
+    statusDot.className = "status-dot " + (dotColor || "grey");
+  }
+
+  function updateDashCycle() {
+    dashCycle.textContent = cycleCount;
+  }
+
+  function updateDashOCR() {
+    dashOCR.textContent = ocrCheckCount;
+  }
+
+  function updateDashConf(conf) {
+    lastConfidence = conf;
+    dashConf.textContent = conf >= 0 ? conf.toFixed(1) + "%" : "-";
+    dashConf.className = "value " + (conf >= MIN_CONFIDENCE ? "green" : "yellow");
+  }
+
+  function updateDashChat(open) {
+    dashChat.textContent = open ? "Open" : "Closed";
+    dashChat.style.color = open ? "#ffcc66" : "#66ddff";
+  }
+
+  function log(msg, type) {
+    var time = new Date().toLocaleTimeString();
+    var div = D.createElement("div");
+    div.innerHTML = '<span class="log-time">[' + time + ']</span> <span class="log-' + (type || "info") + '">' + msg + "</span>";
+    logConsole.prepend(div);
+    if (logConsole.children.length > 100) {
+      logConsole.lastChild.remove();
+    }
+    console.log("[" + time + "] [" + (type || "info") + "] " + msg);
+  }
+
+  function savePositions() {
+    try {
+      var data = {
+        serverListPos: selectionState.serverListPos,
+        multiplayerPos: selectionState.multiplayerPos,
+        backToServerListPos: selectionState.backToServerListPos,
+        disconnectBtnPos: selectionState.disconnectBtnPos,
+        survivalItemPos: selectionState.survivalItemPos,
+        backToGamePos: selectionState.backToGamePos,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      log("Positions saved", "ok");
+      return true;
+    } catch (err) {
+      log("Save failed: " + err.message, "err");
+      return false;
+    }
+  }
+
+  function loadPositions() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        log("No saved positions", "warn");
+        return false;
+      }
+      var data = JSON.parse(raw);
+      var required = ["serverListPos", "multiplayerPos", "backToServerListPos", "disconnectBtnPos", "survivalItemPos", "backToGamePos"];
+      for (var i = 0; i < required.length; i++) {
+        if (!data[required[i]]) {
+          log("Incomplete: " + required[i] + " missing", "warn");
+          return false;
+        }
+      }
+      selectionState.serverListPos = data.serverListPos;
+      selectionState.multiplayerPos = data.multiplayerPos;
+      selectionState.backToServerListPos = data.backToServerListPos;
+      selectionState.disconnectBtnPos = data.disconnectBtnPos;
+      selectionState.survivalItemPos = data.survivalItemPos;
+      selectionState.backToGamePos = data.backToGamePos;
+      selectionState.completed = true;
+
+      updateMarker(markerGreen, data.serverListPos);
+      updateMarker(markerYellow, data.multiplayerPos);
+      updateMarker(markerOrange, data.backToServerListPos);
+      updateMarker(markerRed, data.disconnectBtnPos);
+      updateMarker(markerPurple, data.survivalItemPos);
+      updateMarker(markerCyan, data.backToGamePos);
+
+      dashStartBtn.disabled = false;
+      setStatus("Positions loaded", "green");
+      log("Loaded from " + new Date(data.timestamp).toLocaleString(), "ok");
+      return true;
+    } catch (err) {
+      log("Load failed: " + err.message, "err");
+      return false;
+    }
+  }
+
+  function updateMarker(el, pos) {
+    if (el && pos) {
+      el.style.left = pos.x + "%";
+      el.style.top = pos.y + "%";
+      el.style.display = "block";
+    }
+  }
+
+  function makeDraggable(el) {
+    var dragging = false;
+    var startX, startY, startLeftPct, startTopPct;
+
+    function onStart(e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      var touch = e.touches ? e.touches[0] : null;
+      if (touch) {
+        startX = touch.clientX;
+        startY = touch.clientY;
+      } else {
+        startX = e.clientX;
+        startY = e.clientY;
+      }
+      startLeftPct = parseFloat(el.style.left) || 0;
+      startTopPct = parseFloat(el.style.top) || 0;
+      dragging = true;
+      el.style.cursor = "grabbing";
+      e.preventDefault();
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      var touch = e.touches ? e.touches[0] : null;
+      var clientX, clientY;
+      if (touch) {
+        clientX = touch.clientX;
+        clientY = touch.clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      var dx = clientX - startX;
+      var dy = clientY - startY;
+      var winW = window.innerWidth;
+      var winH = window.innerHeight;
+      var newLeftPct = Math.max(0, Math.min(100, startLeftPct + (dx / winW) * 100));
+      var newTopPct = Math.max(0, Math.min(100, startTopPct + (dy / winH) * 100));
+
+      el.style.left = newLeftPct + "%";
+      el.style.top = newTopPct + "%";
+
+      var id = el.id;
+      var pos = { x: newLeftPct, y: newTopPct };
+      switch (id) {
+        case "marker-green": selectionState.serverListPos = pos; break;
+        case "marker-yellow": selectionState.multiplayerPos = pos; break;
+        case "marker-orange": selectionState.backToServerListPos = pos; break;
+        case "marker-red": selectionState.disconnectBtnPos = pos; break;
+        case "marker-purple": selectionState.survivalItemPos = pos; break;
+        case "marker-cyan": selectionState.backToGamePos = pos; break;
+      }
+      if (selectionState.completed) {
+        savePositions();
+      }
+      e.preventDefault();
+    }
+
+    function onEnd() {
+      if (dragging) {
+        dragging = false;
+        el.style.cursor = "grab";
+        if (selectionState.completed) {
+          savePositions();
+        }
+      }
+    }
+
+    el.addEventListener("mousedown", onStart);
+    el.addEventListener("touchstart", onStart, { passive: false });
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("mouseup", onEnd);
+    document.addEventListener("touchend", onEnd);
+    el.style.cursor = "grab";
+  }
+
+  makeDraggable(markerGreen);
+  makeDraggable(markerYellow);
+  makeDraggable(markerOrange);
+  makeDraggable(markerRed);
+  makeDraggable(markerPurple);
+  makeDraggable(markerCyan);
+
+  function startSelection() {
+    selectionState = {
+      serverListPos: null,
+      multiplayerPos: null,
+      backToServerListPos: null,
+      disconnectBtnPos: null,
+      survivalItemPos: null,
+      backToGamePos: null,
+      completed: false
+    };
+    dashStartBtn.disabled = true;
+    log("Calibration started", "info");
+    showStep(1);
+  }
+
+  function showStep(step) {
+    currentStep = step;
+    var labels = ["Server List", "Multiplayer", "Back to Server List", "Disconnect", "Survival Item", "Back to Game"];
+    var total = 6;
+    calDots.innerHTML = "";
+    for (var i = 1; i <= total; i++) {
+      var dot = D.createElement("span");
+      dot.className = "dot";
+      if (i < step) dot.classList.add("done");
+      else if (i === step) dot.classList.add("active");
+      calDots.appendChild(dot);
+    }
+    calTitle.textContent = "Step " + step + "/" + total;
+    calDesc.textContent = "Click on " + labels[step - 1];
+    calPopup.classList.add("visible");
+    isSelecting = true;
+    waitingForClick = true;
+    setStatus("Click on " + labels[step - 1], "blue");
+    log("Step " + step + "/6: " + labels[step - 1], "step");
+  }
+
+  function hideCal() {
+    calPopup.classList.remove("visible");
+    isSelecting = false;
+  }
+
+  function advanceStep(step) {
+    if (step === 6) {
+      selectionState.completed = true;
+      hideCal();
+      setStatus("Calibration complete", "green");
+      dashStartBtn.disabled = false;
+      log("All positions set", "ok");
+      savePositions();
+      return;
+    }
+    setTimeout(function() {
+      showStep(step + 1);
+    }, 350);
+  }
+
+  function handleCalClick(e) {
+    if (!waitingForClick) return;
+    var rect = D.getElementById("game_frame").getBoundingClientRect();
+    var x = ((e.clientX - rect.left) / rect.width) * 100;
+    var y = ((e.clientY - rect.top) / rect.height) * 100;
+    var step = currentStep;
+
+    switch (step) {
+      case 1:
+        selectionState.serverListPos = { x: x, y: y };
+        markerGreen.style.left = x + "%";
+        markerGreen.style.top = y + "%";
+        markerGreen.style.display = "block";
+        log("Server List: " + x.toFixed(1) + "%, " + y.toFixed(1) + "%", "ok");
+        break;
+      case 2:
+        selectionState.multiplayerPos = { x: x, y: y };
+        markerYellow.style.left = x + "%";
+        markerYellow.style.top = y + "%";
+        markerYellow.style.display = "block";
+        log("Multiplayer: " + x.toFixed(1) + "%, " + y.toFixed(1) + "%", "ok");
+        break;
+      case 3:
+        selectionState.backToServerListPos = { x: x, y: y };
+        markerOrange.style.left = x + "%";
+        markerOrange.style.top = y + "%";
+        markerOrange.style.display = "block";
+        log("Back to Server List: " + x.toFixed(1) + "%, " + y.toFixed(1) + "%", "ok");
+        break;
+      case 4:
+        selectionState.disconnectBtnPos = { x: x, y: y };
+        markerRed.style.left = x + "%";
+        markerRed.style.top = y + "%";
+        markerRed.style.display = "block";
+        log("Disconnect: " + x.toFixed(1) + "%, " + y.toFixed(1) + "%", "ok");
+        break;
+      case 5:
+        selectionState.survivalItemPos = { x: x, y: y };
+        markerPurple.style.left = x + "%";
+        markerPurple.style.top = y + "%";
+        markerPurple.style.display = "block";
+        log("Survival Item: " + x.toFixed(1) + "%, " + y.toFixed(1) + "%", "ok");
+        break;
+      case 6:
+        selectionState.backToGamePos = { x: x, y: y };
+        markerCyan.style.left = x + "%";
+        markerCyan.style.top = y + "%";
+        markerCyan.style.display = "block";
+        log("Back to Game: " + x.toFixed(1) + "%, " + y.toFixed(1) + "%", "ok");
+        break;
+    }
+    waitingForClick = false;
+    hideCal();
+    setStatus("Step " + step + " set", "green");
+    setTimeout(function() {
+      advanceStep(step);
+    }, 300);
+  }
+
+  function skipStep(step) {
+    var defaultPos = { x: 45, y: 45 };
+    var defaultDot = { x: 50, y: 50 };
+    switch (step) {
+      case 1:
+        selectionState.serverListPos = { x: defaultPos.x, y: defaultPos.y };
+        markerGreen.style.left = "45%";
+        markerGreen.style.top = "45%";
+        markerGreen.style.display = "block";
+        break;
+      case 2:
+        selectionState.multiplayerPos = { x: defaultDot.x, y: defaultDot.y };
+        markerYellow.style.left = "50%";
+        markerYellow.style.top = "50%";
+        markerYellow.style.display = "block";
+        break;
+      case 3:
+        selectionState.backToServerListPos = { x: defaultDot.x, y: defaultDot.y };
+        markerOrange.style.left = "50%";
+        markerOrange.style.top = "50%";
+        markerOrange.style.display = "block";
+        break;
+      case 4:
+        selectionState.disconnectBtnPos = { x: defaultDot.x, y: defaultDot.y };
+        markerRed.style.left = "50%";
+        markerRed.style.top = "50%";
+        markerRed.style.display = "block";
+        break;
+      case 5:
+        selectionState.survivalItemPos = { x: defaultDot.x, y: defaultDot.y };
+        markerPurple.style.left = "50%";
+        markerPurple.style.top = "50%";
+        markerPurple.style.display = "block";
+        break;
+      case 6:
+        selectionState.backToGamePos = { x: defaultDot.x, y: defaultDot.y };
+        markerCyan.style.left = "50%";
+        markerCyan.style.top = "50%";
+        markerCyan.style.display = "block";
+        break;
+    }
+    log("Step " + step + " skipped", "warn");
+    hideCal();
+    setTimeout(function() {
+      advanceStep(step);
+    }, 300);
+  }
+
+  D.getElementById("game_frame").addEventListener("click", handleCalClick);
+  D.getElementById("game_frame").addEventListener("touchstart", function(e) {
+    var touch = e.touches[0];
+    if (!touch) return;
+    var me = new MouseEvent("click", {
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    });
+    handleCalClick(me);
+  }, { passive: true });
+
+  calSelect.addEventListener("click", function() {
+    if (!isSelecting) return;
+    hideCal();
+    waitingForClick = true;
+    setStatus("Click on screen - step " + currentStep, "blue");
+    log("Waiting for click, step " + currentStep, "debug");
+  });
+
+  calSkip.addEventListener("click", function() {
+    if (!isSelecting) return;
+    skipStep(currentStep);
+  });
+
+  calCancel.addEventListener("click", function() {
+    if (!isSelecting) return;
+    hideCal();
+    waitingForClick = false;
+    setStatus("Calibration cancelled", "grey");
+    var ids = ["marker-green", "marker-yellow", "marker-orange", "marker-red", "marker-purple", "marker-cyan"];
+    for (var i = 0; i < ids.length; i++) {
+      D.getElementById(ids[i]).style.display = "none";
+    }
+    dashStartBtn.disabled = true;
+    log("Calibration cancelled", "warn");
+  });
+
+  dashPassBtn.addEventListener("click", function() {
+    var currentPass = localStorage.getItem("bclient_password") || "";
+    var newPass = prompt("Enter your server password:", currentPass);
+    if (newPass !== null) {
+      serverPassword = newPass;
+      localStorage.setItem("bclient_password", newPass);
+      log("Password updated", "ok");
+      setStatus("Password saved", "green");
+    }
+  });
+
+  dashCalibrateBtn.addEventListener("click", function() {
+    if (botRunning) {
+      log("Stop bot first", "warn");
+      return;
+    }
+    startSelection();
+  });
+
+  dashStartBtn.addEventListener("click", function() {
+    if (!selectionState.completed) {
+      startSelection();
+      return;
+    }
+    if (botRunning) return;
+    if (!ocrReady) {
+      log("Initializing OCR...", "info");
+      initOCR().then(function() {
+        setTimeout(function() {
+          startBot();
+        }, 300);
+      });
+    } else {
+      setTimeout(function() {
+        startBot();
+      }, 300);
+    }
+  });
+
+  dashStopBtn.addEventListener("click", function() {
+    botStopRequested = true;
+    log("Stop requested", "warn");
+  });
+
+  dashPointerBtn.addEventListener("click", function() {
+    setTimeout(function() {
+      forcePointerLock();
+    }, 300);
+  });
+
+  dashSaveBtn.addEventListener("click", function() {
+    if (selectionState.completed) {
+      savePositions();
+      log("Manual save", "ok");
+    } else {
+      log("No positions to save", "warn");
+    }
+  });
+
+  dashLoadBtn.addEventListener("click", function() {
+    setTimeout(function() {
+      if (loadPositions()) {
+        setStatus("Positions loaded", "green");
+      }
+    }, 300);
+  });
+
+  function forcePointerLock() {
+    var canvas = D.querySelector("#game_frame canvas");
+    if (!canvas) {
+      log("Canvas not found", "err");
+      return;
+    }
+    try {
+      canvas.focus();
+      if (canvas.requestPointerLock) {
+        canvas.requestPointerLock().then(function() {
+          log("Pointer lock acquired", "ok");
+        }).catch(function(err) {
+          log("Pointer lock failed: " + err.message, "warn");
+          setTimeout(function() {
+            dispatchKey("keydown", "t", "KeyT");
+            dispatchKey("keyup", "t", "KeyT");
+            setTimeout(function() {
+              dispatchKey("keydown", "Enter", "Enter");
+              dispatchKey("keyup", "Enter", "Enter");
+            }, 300);
+          }, 300);
+        });
+      }
+    } catch (err) {
+      log("Pointer lock error: " + err.message, "err");
+    }
+  }
+
+  function initOCR() {
+    return new Promise(function(resolve) {
+      try {
+        log("Initializing Tesseract...", "info");
+        Tesseract.createWorker("eng").then(function(worker) {
+          ocrWorker = worker;
+          ocrReady = true;
+          log("OCR ready", "ok");
+          setStatus("OCR ready", "green");
+          resolve(true);
+        }).catch(function(err) {
+          log("OCR init failed: " + err.message, "err");
+          resolve(false);
+        });
+      } catch (err) {
+        log("OCR init failed: " + err.message, "err");
+        resolve(false);
+      }
+    });
+  }
+
+  function getCanvas() {
+    var canvas = D.querySelector("#game_frame canvas");
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      return canvas;
+    }
+    return null;
+  }
+
+  function captureAndProcess(canvas) {
+    try {
+      var offscreen = D.createElement("canvas");
+      offscreen.width = canvas.width;
+      offscreen.height = canvas.height;
+      var ctx = offscreen.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return null;
+
+      ctx.drawImage(canvas, 0, 0);
+      var imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
+      var data = imageData.data;
+      var w = offscreen.width;
+      var h = offscreen.height;
+      var LIGHT_THRESHOLD = 180;
+
+      for (var i = 0; i < data.length; i += 4) {
+        var brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        if (brightness > LIGHT_THRESHOLD) {
+          data[i] = 255;
+          data[i + 1] = 255;
+          data[i + 2] = 255;
+          data[i + 3] = 255;
+        } else {
+          data[i] = 0;
+          data[i + 1] = 0;
+          data[i + 2] = 0;
+          data[i + 3] = 255;
+        }
+      }
+
+      var processed = new Uint8ClampedArray(data);
+      for (i = 0; i < data.length; i += 4) {
+        if (data[i] === 255) {
+          var x = (i / 4) % w;
+          var y = Math.floor((i / 4) / w);
+          var neighbors = 0;
+          for (var dy = -1; dy <= 1; dy++) {
+            for (var dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              var nx = x + dx;
+              var ny = y + dy;
+              if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                if (data[(ny * w + nx) * 4] === 255) neighbors++;
+              }
             }
+          }
+          if (neighbors < 2) {
+            processed[i] = 0;
+            processed[i + 1] = 0;
+            processed[i + 2] = 0;
+          }
+        }
+      }
 
-            function hideLoadingScreen() {
-                const loader = document.getElementById("loading-container");
-                if (loader) loader.style.display = "none";
+      var finalData = new Uint8ClampedArray(processed);
+      for (i = 0; i < processed.length; i += 4) {
+        if (processed[i] === 255) {
+          x = (i / 4) % w;
+          y = Math.floor((i / 4) / w);
+          neighbors = 0;
+          for (dy = -2; dy <= 2; dy++) {
+            for (dx = -2; dx <= 2; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              nx = x + dx;
+              ny = y + dy;
+              if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                if (processed[(ny * w + nx) * 4] === 255) neighbors++;
+              }
             }
+          }
+          if (neighbors < 3) {
+            finalData[i] = 0;
+            finalData[i + 1] = 0;
+            finalData[i + 2] = 0;
+          }
+        }
+      }
 
-            window.addEventListener("load", async () => {
-                if ("serviceWorker" in navigator) {
-                    try { await navigator.serviceWorker.register("sw.js"); } catch (err) {}
-                }
+      ctx.putImageData(new ImageData(finalData, w, h), 0, 0);
+      return offscreen.toDataURL("image/png");
+    } catch (err) {
+      return null;
+    }
+  }
 
-                try {
-                    const epk = await loadCachedAssetUI("./game-assets/meta.json", true, "1.8.8-wasm")
-                        .catch(async () => await loadCachedAssetUI("./game-assets/meta.json", true, "1.8.8-wasm"));
+  function performOCR() {
+    return new Promise(function(resolve) {
+      if (!ocrReady) {
+        initOCR().then(function() {
+          performOCR().then(resolve);
+        }).catch(function() {
+          resolve({ text: "", confidence: 0, words: 0 });
+        });
+        return;
+      }
 
-                    const listResponse = await fetch("list.json");
-                    const listData = await listResponse.json();
+      ocrCheckCount++;
+      updateDashOCR();
+      setDashState("ocr");
+      setStatus("OCR scanning...", "blue");
 
-                    const params = {
-                        demoMode: false,
-                        localesURI: "lang/",
-                        container: "game_frame",
-                        assetsURI: epk,
-                        worldsDB: "worlds",
-                        ...listData,
-                    };
+      try {
+        var canvas = getCanvas();
+        if (!canvas) {
+          setDashState("idle");
+          resolve({ text: "", confidence: 0, words: 0 });
+          return;
+        }
 
-                    parseParams(params);
-                    window.eaglercraftXOpts = params;
+        var imageData = captureAndProcess(canvas);
+        if (!imageData) {
+          setDashState("idle");
+          resolve({ text: "", confidence: 0, words: 0 });
+          return;
+        }
 
-                    await new Promise(res => {
-                        if (window["wispcraft-ServerReady"]) window["wispcraft-ServerReady"].then(res);
-                        else setTimeout(res, 800);
+        var startTime = Date.now();
+        ocrWorker.recognize(imageData).then(function(result) {
+          var duration = ((Date.now() - startTime) / 1000).toFixed(2);
+          var text = result.data.text || "";
+          var confidence = result.data.confidence || 0;
+          var words = result.data.words || [];
+
+          updateDashConf(confidence);
+          log("OCR: " + words.length + " words, conf " + confidence.toFixed(1) + "% (" + duration + "s)", "ocr");
+          setDashState("running");
+          resolve({ text: text, confidence: confidence, words: words.length });
+        }).catch(function(err) {
+          log("OCR error: " + err.message, "err");
+          setDashState("error");
+          resolve({ text: "", confidence: 0, words: 0 });
+        });
+      } catch (err) {
+        log("OCR error: " + err.message, "err");
+        setDashState("error");
+        resolve({ text: "", confidence: 0, words: 0 });
+      }
+    });
+  }
+
+  function dispatchMouse(type, x, y, button) {
+    var canvas = D.querySelector("#game_frame canvas");
+    if (!canvas) return;
+    try {
+      var rect = canvas.getBoundingClientRect();
+      var ev = new MouseEvent(type, {
+        clientX: Math.max(rect.left, Math.min(rect.right, x)),
+        clientY: Math.max(rect.top, Math.min(rect.bottom, y)),
+        button: button || 0,
+        bubbles: true,
+        cancelable: true,
+        view: window
+      });
+      canvas.dispatchEvent(ev);
+    } catch (err) {
+      log("Mouse event error: " + err.message, "err");
+    }
+  }
+
+  function dispatchKey(type, key, code) {
+    try {
+      var ev = new KeyboardEvent(type, {
+        key: key,
+        code: code || key,
+        bubbles: true,
+        cancelable: true,
+        view: window
+      });
+      document.dispatchEvent(ev);
+    } catch (err) {
+      log("Key event error: " + err.message, "err");
+    }
+  }
+
+  function getPixelPos(sel) {
+    if (!sel) return null;
+    var rect = D.getElementById("game_frame").getBoundingClientRect();
+    return {
+      x: rect.left + (sel.x / 100) * rect.width,
+      y: rect.top + (sel.y / 100) * rect.height
+    };
+  }
+
+  function openChat() {
+    if (!isChatOpen) {
+      isChatOpen = true;
+      updateDashChat(true);
+      log("Chat opened", "debug");
+    }
+  }
+
+  function closeChat() {
+    if (isChatOpen) {
+      isChatOpen = false;
+      updateDashChat(false);
+      log("Chat closed", "debug");
+    }
+  }
+
+  function safePressKey(key, code) {
+    if (key === "t" && isChatOpen && !isTypingPassword) {
+      log("Blocked T - chat open", "warn");
+      return;
+    }
+    dispatchKey("keydown", key, code);
+    dispatchKey("keyup", key, code);
+  }
+
+  function safeTypeString(text, delay) {
+    return new Promise(function(resolve) {
+      isTypingPassword = true;
+      var idx = 0;
+
+      function typeNext() {
+        if (idx >= text.length || botStopRequested) {
+          isTypingPassword = false;
+          resolve();
+          return;
+        }
+
+        if (!isTabVisible) {
+          setStatus("Tab hidden - paused", "yellow");
+          var interval = setInterval(function() {
+            if (isTabVisible || botStopRequested) {
+              clearInterval(interval);
+              if (!botStopRequested) {
+                setStatus("Running", "green");
+                typeNext();
+              } else {
+                isTypingPassword = false;
+                resolve();
+              }
+            }
+          }, 100);
+          return;
+        }
+
+        var ch = text[idx];
+        var code = "Key" + ch.toUpperCase();
+        if (ch === "/") code = "Slash";
+        else if (ch === " ") code = "Space";
+        else if (ch === ".") code = "Period";
+        else if (ch === "@") code = "Digit2";
+        else if (ch === "#") code = "Digit3";
+        else if (ch === "!") code = "Digit1";
+        else if (ch === "?") code = "Slash";
+
+        dispatchKey("keydown", ch, code);
+        dispatchKey("keyup", ch, code);
+        idx++;
+        setTimeout(typeNext, delay || 50);
+      }
+
+      typeNext();
+    });
+  }
+
+  function sleep(ms) {
+    return new Promise(function(resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function sleepWithTabCheck(ms, checkInterval) {
+    return new Promise(function(resolve) {
+      var elapsed = 0;
+      var interval = checkInterval || 500;
+
+      function waitStep() {
+        if (elapsed >= ms || botStopRequested) {
+          resolve();
+          return;
+        }
+
+        if (!isTabVisible) {
+          setStatus("Tab hidden - paused", "yellow");
+          var timer = setInterval(function() {
+            if (isTabVisible || botStopRequested) {
+              clearInterval(timer);
+              if (!botStopRequested) {
+                setStatus("Running", "green");
+                waitStep();
+              } else {
+                resolve();
+              }
+            }
+          }, 100);
+          return;
+        }
+
+        var step = Math.min(interval, ms - elapsed);
+        setTimeout(function() {
+          elapsed += step;
+          waitStep();
+        }, step);
+      }
+
+      waitStep();
+    });
+  }
+
+  function doOCRCheck(stepName) {
+    return new Promise(function(resolve) {
+      sleepWithTabCheck(300).then(function() {
+        log("OCR check: " + stepName, "debug");
+        performOCR().then(function(result) {
+          sleepWithTabCheck(300).then(function() {
+            var text = result.text || "";
+            var confidence = result.confidence || 0;
+            var searchText = text.toLowerCase();
+
+            var foundBackToServer = searchText.includes("back to server list");
+            var foundBackToGame = searchText.includes("back to game") ||
+                                 searchText.includes("back to the game") ||
+                                 searchText.includes("resume game") ||
+                                 searchText.includes("return to game");
+
+            if (foundBackToServer && confidence >= MIN_CONFIDENCE) {
+              log("Found Back to Server List (conf " + confidence.toFixed(1) + "%)", "ok");
+              var btsl = selectionState.backToServerListPos;
+              if (btsl) {
+                var pos = getPixelPos(btsl);
+                if (pos) {
+                  if (isChatOpen) {
+                    log("Closing chat", "debug");
+                    safePressKey("Escape", "Escape");
+                    sleepWithTabCheck(300).then(function() {
+                      closeChat();
+                      dispatchMouse("mousedown", pos.x, pos.y, 0);
+                      dispatchMouse("mouseup", pos.x, pos.y, 0);
+                      sleepWithTabCheck(1000).then(function() {
+                        log("Reset triggered", "step");
+                        resolve("reset");
+                      });
                     });
-
-                    hideLoadingScreen();
-                    main();
-
-                    setTimeout(() => {
-                        if (window.__eaglercraftXBlobURLs) {
-                            window.__eaglercraftXBlobURLs.forEach(url => {
-                                try { URL.revokeObjectURL(url); } catch (e) {}
-                            });
-                            window.__eaglercraftXBlobURLs.length = 0;
-                        }
-                    }, 15000);
-                } catch (err) {
-                    console.error("Boot Error:", err);
-                    showErrorPopup("Could not load game assets. Try again or check your internet.");
-                }
-            });
-        })();
-    </script>
-
-    <!-- BCLIENT SCRIPT MET ALLES -->
-    <script>
-        (function() {
-            "use strict";
-
-            // ---- DOM REFS ----
-            const statusBar = document.getElementById('status-bar');
-            const logConsole = document.getElementById('log-console');
-            const popupContainer = document.getElementById('popup-container');
-            const popupTitle = document.getElementById('popup-title');
-            const popupDesc = document.getElementById('popup-desc');
-            const dotsContainer = document.getElementById('dots-container');
-            const popupSelect = document.getElementById('popup-select');
-            const popupSkip = document.getElementById('popup-skip');
-            const popupCancel = document.getElementById('popup-cancel');
-            const toggleBtn = document.getElementById('toggle-ui-btn');
-            const startBotBtn = document.getElementById('start-bot-btn');
-            const stopBotBtn = document.getElementById('stop-bot-btn');
-            const passInput = document.getElementById('pass-input');
-            const overlay = document.getElementById('bclient-overlay');
-            const startSelectieBtn = document.getElementById('start-selectie-btn');
-            const ocrStatus = document.getElementById('ocr-status');
-            const farmingProgress = document.getElementById('farming-progress');
-            const loadStorageBtn = document.getElementById('load-storage-btn');
-
-            const markerGreen = document.getElementById('marker-green');
-            const markerOrange = document.getElementById('marker-orange');
-            const markerRed = document.getElementById('marker-red');
-            const markerPurple = document.getElementById('marker-purple');
-            const markerCyan = document.getElementById('marker-cyan');
-
-            // ---- STATE ----
-            let selectionState = {
-                step: 0,
-                serverListPos: null,
-                backToServerListPos: null,
-                disconnectBtnPos: null,
-                survivalItemPos: null,
-                backToGamePos: null,
-                completed: false
-            };
-
-            let isSelecting = false;
-            let waitingForClick = false;
-            let currentStep = 0;
-            let botRunning = false;
-            let botStopRequested = false;
-            let ocrCheckCount = 0;
-            let isPausedForOCR = false;
-
-            // Tesseract worker
-            let ocrWorker = null;
-            let ocrReady = false;
-
-            // CONSTANTS
-            const MIN_CONFIDENCE = 50;
-            const STORAGE_KEY = 'bclient_marker_positions';
-
-            // Flags voor disconnect fase
-            let justPressedEscape = false;
-            let inDisconnectPhase = false;
-
-            // ---- LOG FUNCTIES ----
-            function log(msg, type = '') {
-                const time = new Date().toLocaleTimeString();
-                const div = document.createElement('div');
-                const cls = type ? `log-${type}` : '';
-                div.innerHTML = `<span class="log-time">[${time}]</span> <span class="${cls}">${msg}</span>`;
-                logConsole.prepend(div);
-                if (logConsole.children.length > 200) logConsole.lastChild.remove();
-                console.log(`[${time}] ${msg}`);
-            }
-
-            function logDebug(msg) { log('🔍 ' + msg, 'debug'); }
-            function logOCR(msg) { log('📖 ' + msg, 'ocr'); }
-            function logSuccess(msg) { log('✅ ' + msg, 'success'); }
-            function logError(msg) { log('❌ ' + msg, 'error'); }
-            function logStep(msg) { log('📍 ' + msg, 'step'); }
-            function logFarming(msg) { log('⏳ ' + msg, 'farming'); }
-            function logReset(msg) { log('🔄 ' + msg, 'reset'); }
-            function logProcess(msg) { log('⚡ ' + msg, 'process'); }
-            function logStorage(msg) { log('💾 ' + msg, 'storage'); }
-
-            function setStatus(text) {
-                const span = statusBar.querySelector('span');
-                if (span) span.textContent = text;
-            }
-
-            // ---- STORAGE FUNCTIES ----
-            function savePositions() {
-                try {
-                    const data = {
-                        serverListPos: selectionState.serverListPos,
-                        backToServerListPos: selectionState.backToServerListPos,
-                        disconnectBtnPos: selectionState.disconnectBtnPos,
-                        survivalItemPos: selectionState.survivalItemPos,
-                        backToGamePos: selectionState.backToGamePos,
-                        timestamp: Date.now()
-                    };
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-                    logStorage('Posities opgeslagen in localStorage');
-                    return true;
-                } catch (err) {
-                    logError('Opslaan mislukt: ' + err.message);
-                    return false;
-                }
-            }
-
-            function loadPositions() {
-                try {
-                    const raw = localStorage.getItem(STORAGE_KEY);
-                    if (!raw) {
-                        logStorage('Geen opgeslagen posities gevonden');
-                        return false;
-                    }
-                    const data = JSON.parse(raw);
-                    
-                    // Check of de data compleet is
-                    const required = ['serverListPos', 'backToServerListPos', 'disconnectBtnPos', 'survivalItemPos', 'backToGamePos'];
-                    for (const key of required) {
-                        if (!data[key]) {
-                            logStorage(`Onvolledige data: ${key} ontbreekt`);
-                            return false;
-                        }
-                    }
-                    
-                    // Restore
-                    selectionState.serverListPos = data.serverListPos;
-                    selectionState.backToServerListPos = data.backToServerListPos;
-                    selectionState.disconnectBtnPos = data.disconnectBtnPos;
-                    selectionState.survivalItemPos = data.survivalItemPos;
-                    selectionState.backToGamePos = data.backToGamePos;
-                    selectionState.completed = true;
-                    
-                    // Update markers
-                    updateMarkerPosition(markerGreen, data.serverListPos);
-                    updateMarkerPosition(markerOrange, data.backToServerListPos);
-                    updateMarkerPosition(markerRed, data.disconnectBtnPos);
-                    updateMarkerPosition(markerPurple, data.survivalItemPos);
-                    updateMarkerPosition(markerCyan, data.backToGamePos);
-                    
-                    startBotBtn.disabled = false;
-                    setStatus('✅ Posities geladen! Start de bot.');
-                    logStorage(`Posities geladen van ${new Date(data.timestamp).toLocaleString()}`);
-                    logStorage(`Server List: ${data.serverListPos.x.toFixed(1)}%, ${data.serverListPos.y.toFixed(1)}%`);
-                    logStorage(`Back to Server List: ${data.backToServerListPos.x.toFixed(1)}%, ${data.backToServerListPos.y.toFixed(1)}%`);
-                    logStorage(`Disconnect: ${data.disconnectBtnPos.x.toFixed(1)}%, ${data.disconnectBtnPos.y.toFixed(1)}%`);
-                    logStorage(`Survival Item: ${data.survivalItemPos.x.toFixed(1)}%, ${data.survivalItemPos.y.toFixed(1)}%`);
-                    logStorage(`Back to Game: ${data.backToGamePos.x.toFixed(1)}%, ${data.backToGamePos.y.toFixed(1)}%`);
-                    
-                    return true;
-                } catch (err) {
-                    logError('Laden mislukt: ' + err.message);
-                    return false;
-                }
-            }
-
-            function updateMarkerPosition(el, pos) {
-                if (!el || !pos) return;
-                el.style.left = pos.x + '%';
-                el.style.top = pos.y + '%';
-                el.style.display = 'block';
-            }
-
-            // ---- MARKER FUNCTIES ----
-            function hideAllMarkers() {
-                ['marker-green','marker-orange','marker-red','marker-purple','marker-cyan'].forEach(id => {
-                    document.getElementById(id).style.display = 'none';
-                });
-            }
-
-            // ---- POPUP FUNCTIES ----
-            function showPopup(step) {
-                currentStep = step;
-                const total = 5;
-                dotsContainer.innerHTML = '';
-                for (let i = 1; i <= total; i++) {
-                    const dot = document.createElement('span');
-                    dot.className = 'dot';
-                    if (i < step) dot.classList.add('done');
-                    else if (i === step) dot.classList.add('active');
-                    dotsContainer.appendChild(dot);
-                }
-                const labels = [
-                    'Selecteer Server List',
-                    'Selecteer Back to Server List knop',
-                    'Selecteer Disconnect knop',
-                    'Selecteer Survival Item',
-                    'Selecteer Back to Game knop'
-                ];
-                popupTitle.textContent = `Stap ${step}/${total}`;
-                popupDesc.textContent = labels[step-1] || '';
-                popupContainer.classList.add('visible');
-                isSelecting = true;
-                waitingForClick = false;
-                overlay.classList.add('active');
-                setStatus(`Stap ${step}/${total}: ${labels[step-1]}`);
-            }
-
-            function hidePopup() {
-                popupContainer.classList.remove('visible');
-                isSelecting = false;
-                overlay.classList.remove('active');
-            }
-
-            function startSelection() {
-                hideAllMarkers();
-                selectionState = { step:0, serverListPos:null, backToServerListPos:null, disconnectBtnPos:null, survivalItemPos:null, backToGamePos:null, completed:false };
-                startBotBtn.disabled = true;
-                log('📋 Selectie gestart');
-                showPopup(1);
-                loadStorageBtn.classList.remove('visible');
-            }
-
-            function skipStep(step) {
-                const defaultPos = { x: 45, y: 45 };
-                const defaultDot = { x: 50, y: 50 };
-                switch(step) {
-                    case 1: 
-                        selectionState.serverListPos = { ...defaultPos }; 
-                        markerGreen.style.left = '45%';
-                        markerGreen.style.top = '45%';
-                        markerGreen.style.display = 'block';
-                        break;
-                    case 2: 
-                        selectionState.backToServerListPos = { ...defaultDot };
-                        markerOrange.style.left = '50%';
-                        markerOrange.style.top = '50%';
-                        markerOrange.style.display = 'block';
-                        break;
-                    case 3: 
-                        selectionState.disconnectBtnPos = { ...defaultDot };
-                        markerRed.style.left = '50%';
-                        markerRed.style.top = '50%';
-                        markerRed.style.display = 'block';
-                        break;
-                    case 4: 
-                        selectionState.survivalItemPos = { ...defaultDot };
-                        markerPurple.style.left = '50%';
-                        markerPurple.style.top = '50%';
-                        markerPurple.style.display = 'block';
-                        break;
-                    case 5: 
-                        selectionState.backToGamePos = { ...defaultDot };
-                        markerCyan.style.left = '50%';
-                        markerCyan.style.top = '50%';
-                        markerCyan.style.display = 'block';
-                        break;
-                }
-                log(`Stap ${step} overgeslagen (default positie)`);
-                advanceAfterStep(step);
-            }
-
-            function advanceAfterStep(step) {
-                if (step === 5) {
-                    selectionState.completed = true;
-                    hidePopup();
-                    setStatus('✅ Selectie compleet! Start de bot.');
-                    startBotBtn.disabled = false;
-                    logSuccess('Selectie compleet!');
-                    savePositions();
-                    loadStorageBtn.classList.remove('visible');
-                    return;
-                }
-                const next = step + 1;
-                showPopup(next);
-            }
-
-            function handleCanvasClick(e) {
-                if (!waitingForClick) return;
-                const rect = overlay.getBoundingClientRect();
-                const x = ((e.clientX - rect.left) / rect.width) * 100;
-                const y = ((e.clientY - rect.top) / rect.height) * 100;
-                const step = currentStep;
-
-                switch(step) {
-                    case 1:
-                        selectionState.serverListPos = { x, y };
-                        markerGreen.style.left = x + '%';
-                        markerGreen.style.top = y + '%';
-                        markerGreen.style.display = 'block';
-                        log(`📌 Server List op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
-                        break;
-                    case 2:
-                        selectionState.backToServerListPos = { x, y };
-                        markerOrange.style.left = x + '%';
-                        markerOrange.style.top = y + '%';
-                        markerOrange.style.display = 'block';
-                        log(`📌 Back to Server List op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
-                        break;
-                    case 3:
-                        selectionState.disconnectBtnPos = { x, y };
-                        markerRed.style.left = x + '%';
-                        markerRed.style.top = y + '%';
-                        markerRed.style.display = 'block';
-                        log(`📌 Disconnect knop op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
-                        break;
-                    case 4:
-                        selectionState.survivalItemPos = { x, y };
-                        markerPurple.style.left = x + '%';
-                        markerPurple.style.top = y + '%';
-                        markerPurple.style.display = 'block';
-                        log(`📌 Survival Item op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
-                        break;
-                    case 5:
-                        selectionState.backToGamePos = { x, y };
-                        markerCyan.style.left = x + '%';
-                        markerCyan.style.top = y + '%';
-                        markerCyan.style.display = 'block';
-                        log(`📌 Back to Game op (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
-                        break;
-                }
-                waitingForClick = false;
-                hidePopup();
-                setStatus(`✅ Stap ${step} vastgelegd (sleepbaar)`);
-                checkCompletion();
-                setTimeout(() => {
-                    if (!isSelecting && !waitingForClick) {
-                        advanceAfterStep(step);
-                    }
-                }, 300);
-            }
-
-            function checkCompletion() {
-                if (selectionState.serverListPos && selectionState.backToServerListPos &&
-                    selectionState.disconnectBtnPos && selectionState.survivalItemPos &&
-                    selectionState.backToGamePos) {
-                    selectionState.completed = true;
-                    startBotBtn.disabled = false;
-                    setStatus('✅ Selectie compleet! Start de bot.');
-                    logSuccess('Alle markers zijn gezet');
-                    savePositions();
-                }
-            }
-
-            // ---- DRAGGABLE ----
-            function makeDraggable(el) {
-                let isDragging = false;
-                let startX, startY, startLeftPct, startTopPct;
-
-                const onStart = (e) => {
-                    if (e.button !== undefined && e.button !== 0) return;
-                    const touch = e.touches ? e.touches[0] : null;
-                    if (touch) {
-                        startX = touch.clientX;
-                        startY = touch.clientY;
-                    } else {
-                        startX = e.clientX;
-                        startY = e.clientY;
-                    }
-                    const leftPct = parseFloat(el.style.left) || 0;
-                    const topPct = parseFloat(el.style.top) || 0;
-                    startLeftPct = leftPct;
-                    startTopPct = topPct;
-                    isDragging = true;
-                    el.style.cursor = 'grabbing';
-                    e.preventDefault();
-                };
-
-                const onMoveFn = (e) => {
-                    if (!isDragging) return;
-                    const touch = e.touches ? e.touches[0] : null;
-                    let clientX, clientY;
-                    if (touch) {
-                        clientX = touch.clientX;
-                        clientY = touch.clientY;
-                    } else {
-                        clientX = e.clientX;
-                        clientY = e.clientY;
-                    }
-                    const dx = clientX - startX;
-                    const dy = clientY - startY;
-                    const winW = window.innerWidth;
-                    const winH = window.innerHeight;
-                    let newLeftPct = startLeftPct + (dx / winW) * 100;
-                    let newTopPct = startTopPct + (dy / winH) * 100;
-                    newLeftPct = Math.max(0, Math.min(100, newLeftPct));
-                    newTopPct = Math.max(0, Math.min(100, newTopPct));
-                    
-                    el.style.left = newLeftPct + '%';
-                    el.style.top = newTopPct + '%';
-                    
-                    const id = el.id;
-                    let pos = { x: newLeftPct, y: newTopPct };
-                    switch(id) {
-                        case 'marker-green': selectionState.serverListPos = pos; break;
-                        case 'marker-orange': selectionState.backToServerListPos = pos; break;
-                        case 'marker-red': selectionState.disconnectBtnPos = pos; break;
-                        case 'marker-purple': selectionState.survivalItemPos = pos; break;
-                        case 'marker-cyan': selectionState.backToGamePos = pos; break;
-                    }
-                    
-                    checkCompletion();
-                    e.preventDefault();
-                };
-
-                const onEnd = () => {
-                    if (isDragging) {
-                        isDragging = false;
-                        el.style.cursor = 'grab';
-                        // Save after drag
-                        if (selectionState.completed) {
-                            savePositions();
-                        }
-                    }
-                };
-
-                el.addEventListener('mousedown', onStart);
-                el.addEventListener('touchstart', onStart, { passive: false });
-                document.addEventListener('mousemove', onMoveFn);
-                document.addEventListener('touchmove', onMoveFn, { passive: false });
-                document.addEventListener('mouseup', onEnd);
-                document.addEventListener('touchend', onEnd);
-                el.style.cursor = 'grab';
-            }
-
-            makeDraggable(markerGreen);
-            makeDraggable(markerOrange);
-            makeDraggable(markerRed);
-            makeDraggable(markerPurple);
-            makeDraggable(markerCyan);
-
-            // ---- TESSERACT OCR ----
-            async function initOCR() {
-                try {
-                    logDebug('Tesseract.js initialiseren...');
-                    ocrStatus.textContent = '🔍 OCR initialiseren...';
-                    ocrStatus.classList.add('visible');
-                    
-                    ocrWorker = await Tesseract.createWorker('eng');
-                    ocrReady = true;
-                    
-                    ocrStatus.textContent = '✅ OCR gereed';
-                    setTimeout(() => ocrStatus.classList.remove('visible'), 2000);
-                    logSuccess('Tesseract.js OCR geïnitialiseerd!');
-                    return true;
-                } catch (err) {
-                    logError('OCR init fout: ' + err.message);
-                    ocrStatus.classList.remove('visible');
-                    return false;
-                }
-            }
-
-            function getCanvas() {
-                const frame = document.getElementById('game_frame');
-                if (!frame) {
-                    logError('Game frame niet gevonden!');
-                    return null;
-                }
-                
-                const canvas = frame.querySelector('canvas');
-                if (!canvas) {
-                    logError('Canvas niet gevonden in game frame!');
-                    return null;
-                }
-                
-                if (canvas.width === 0 || canvas.height === 0) {
-                    logError(`Canvas heeft geen grootte: ${canvas.width}x${canvas.height}`);
-                    return null;
-                }
-                
-                return canvas;
-            }
-
-            // ---- HEAVY PROCESSING ----
-            function captureAndProcessCanvas(canvas) {
-                try {
-                    const offscreen = document.createElement('canvas');
-                    offscreen.width = canvas.width;
-                    offscreen.height = canvas.height;
-                    const ctx = offscreen.getContext('2d', { willReadFrequently: true });
-                    
-                    if (!ctx) {
-                        logError('Kan geen 2D context krijgen!');
-                        return null;
-                    }
-                    
-                    ctx.drawImage(canvas, 0, 0);
-                    
-                    const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
-                    const data = imageData.data;
-                    const w = offscreen.width;
-                    const h = offscreen.height;
-                    
-                    // HEAVY PROCESSING: Alleen de lichtste pixels doorlaten
-                    const LIGHT_THRESHOLD = 180;
-                    
-                    // Stap 1: Binary threshold
-                    let lightCount = 0;
-                    for (let i = 0; i < data.length; i += 4) {
-                        const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
-                        if (brightness > LIGHT_THRESHOLD) {
-                            data[i] = 255;
-                            data[i+1] = 255;
-                            data[i+2] = 255;
-                            data[i+3] = 255;
-                            lightCount++;
-                        } else {
-                            data[i] = 0;
-                            data[i+1] = 0;
-                            data[i+2] = 0;
-                            data[i+3] = 255;
-                        }
-                    }
-                    
-                    // Stap 2: Remove isolated pixels (3x3 window)
-                    const processedData = new Uint8ClampedArray(data);
-                    for (let i = 0; i < data.length; i += 4) {
-                        if (data[i] === 255) {
-                            const x = (i / 4) % w;
-                            const y = Math.floor((i / 4) / w);
-                            let neighbors = 0;
-                            for (let dy = -1; dy <= 1; dy++) {
-                                for (let dx = -1; dx <= 1; dx++) {
-                                    if (dx === 0 && dy === 0) continue;
-                                    const nx = x + dx;
-                                    const ny = y + dy;
-                                    if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                                        const idx = (ny * w + nx) * 4;
-                                        if (data[idx] === 255) neighbors++;
-                                    }
-                                }
-                            }
-                            if (neighbors < 2) {
-                                processedData[i] = 0;
-                                processedData[i+1] = 0;
-                                processedData[i+2] = 0;
-                            }
-                        }
-                    }
-                    
-                    // Stap 3: Second pass - larger window
-                    const finalData = new Uint8ClampedArray(processedData);
-                    for (let i = 0; i < processedData.length; i += 4) {
-                        if (processedData[i] === 255) {
-                            const x = (i / 4) % w;
-                            const y = Math.floor((i / 4) / w);
-                            let neighbors = 0;
-                            for (let dy = -2; dy <= 2; dy++) {
-                                for (let dx = -2; dx <= 2; dx++) {
-                                    if (dx === 0 && dy === 0) continue;
-                                    const nx = x + dx;
-                                    const ny = y + dy;
-                                    if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                                        const idx = (ny * w + nx) * 4;
-                                        if (processedData[idx] === 255) neighbors++;
-                                    }
-                                }
-                            }
-                            if (neighbors < 3) {
-                                finalData[i] = 0;
-                                finalData[i+1] = 0;
-                                finalData[i+2] = 0;
-                            }
-                        }
-                    }
-                    
-                    ctx.putImageData(new ImageData(finalData, w, h), 0, 0);
-                    
-                    return offscreen.toDataURL('image/png');
-                } catch (err) {
-                    logError('Capture fout: ' + err.message);
-                    return null;
-                }
-            }
-
-            // ---- PERFORM OCR ----
-            async function performOCR() {
-                if (!ocrReady) {
-                    logDebug('OCR niet gereed, probeer te initialiseren...');
-                    await initOCR();
-                    if (!ocrReady) {
-                        logError('OCR nog steeds niet gereed');
-                        return { text: '', confidence: 0, words: 0, debug: 'OCR niet gereed' };
-                    }
-                }
-
-                ocrCheckCount++;
-                logOCR(`📖 OCR scan #${ocrCheckCount} gestart...`);
-                ocrStatus.textContent = `🔍 OCR #${ocrCheckCount}...`;
-                ocrStatus.classList.add('visible');
-
-                try {
-                    const canvas = getCanvas();
-                    if (!canvas) {
-                        ocrStatus.classList.remove('visible');
-                        return { text: '', confidence: 0, words: 0, debug: 'Geen canvas' };
-                    }
-
-                    const imageData = captureAndProcessCanvas(canvas);
-                    if (!imageData) {
-                        ocrStatus.classList.remove('visible');
-                        return { text: '', confidence: 0, words: 0, debug: 'Geen image data' };
-                    }
-
-                    const startTime = Date.now();
-                    const result = await ocrWorker.recognize(imageData);
-                    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-                    
-                    const text = result.data.text || '';
-                    const confidence = result.data.confidence || 0;
-                    const words = result.data.words || [];
-                    
-                    logOCR(`OCR #${ocrCheckCount} voltooid in ${duration}s, ${words.length} woorden, confidence: ${confidence.toFixed(1)}%`);
-                    
-                    ocrStatus.classList.remove('visible');
-
-                    return {
-                        text: text,
-                        confidence: confidence,
-                        words: words.length,
-                        debug: `Confidence: ${confidence.toFixed(1)}%`
-                    };
-
-                } catch (err) {
-                    logError('OCR fout: ' + err.message);
-                    ocrStatus.classList.remove('visible');
-                    return { text: '', confidence: 0, words: 0, debug: err.message };
-                }
-            }
-
-            // ---- COMBINED OCR CHECK ----
-            async function doOCRCheck(stepName) {
-                // Pause before OCR
-                isPausedForOCR = true;
-                await sleep(500);
-                
-                logStep(`📖 OCR check voor "${stepName}"...`);
-                const result = await performOCR();
-                
-                // Pause after OCR
-                await sleep(500);
-                isPausedForOCR = false;
-                
-                const text = result.text || '';
-                const confidence = result.confidence || 0;
-                const searchText = text.toLowerCase();
-                
-                // Check 1: "back to server list"
-                const foundBackToServer = searchText.includes('back to server list');
-                
-                // Check 2: "back to game"
-                const foundBackToGame = searchText.includes('back to game') || 
-                                        searchText.includes('back to the game') ||
-                                        searchText.includes('resume game') ||
-                                        searchText.includes('return to game');
-
-                logDebug(`📊 OCR: BackToServer=${foundBackToServer}, BackToGame=${foundBackToGame}, conf=${confidence.toFixed(1)}%`);
-
-                // PRIORITEIT 1: Back to Server List
-                if (foundBackToServer && confidence >= MIN_CONFIDENCE) {
-                    logSuccess(`🎯 "Back to server list" gevonden! confidence: ${confidence.toFixed(1)}%`);
-                    
-                    const btsl = selectionState.backToServerListPos;
-                    if (btsl) {
-                        const pos = getPixelPos(btsl);
-                        if (pos) {
-                            logSuccess(`📐 Klik op Back to Server List marker (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-                            dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                            dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                            await sleep(1000);
-                            logReset('🔄 Back to Server List trigger! Herstart vanaf stap 1!');
-                            return 'reset';
-                        }
-                    } else {
-                        logError('❌ Back to Server List positie niet ingesteld!');
-                    }
-                }
-
-                // PRIORITEIT 2: Back to Game
-                if (foundBackToGame && confidence >= MIN_CONFIDENCE) {
-                    if (justPressedEscape && inDisconnectPhase) {
-                        logDebug(`⏭️ "Back to game" gevonden maar we zitten in disconnect fase, overslaan`);
-                    } else {
-                        logSuccess(`🎯 "Back to game" gevonden! confidence: ${confidence.toFixed(1)}%`);
-                        
-                        const btg = selectionState.backToGamePos;
-                        if (btg) {
-                            const pos = getPixelPos(btg);
-                            if (pos) {
-                                logSuccess(`📐 Klik op Back to Game marker (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                await sleep(1000);
-                                logDebug('✅ Back to Game geklikt');
-                                return 'backtogame';
-                            }
-                        } else {
-                            logError('❌ Back to Game positie niet ingesteld!');
-                        }
-                    }
-                }
-
-                logDebug(`⏭️ Geen actie nodig`);
-                return 'none';
-            }
-
-            // ---- DISPATCH FUNCTIES ----
-            function dispatchMouseEvent(type, x, y, button=0) {
-                const canvas = document.querySelector('#game_frame canvas');
-                if (!canvas) {
-                    logError('Canvas niet gevonden voor mouse event!');
-                    return;
-                }
-                try {
-                    const rect = canvas.getBoundingClientRect();
-                    const clampedX = Math.max(rect.left, Math.min(rect.right, x));
-                    const clampedY = Math.max(rect.top, Math.min(rect.bottom, y));
-                    
-                    const ev = new MouseEvent(type, {
-                        clientX: clampedX,
-                        clientY: clampedY,
-                        button: button,
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
+                  } else {
+                    dispatchMouse("mousedown", pos.x, pos.y, 0);
+                    dispatchMouse("mouseup", pos.x, pos.y, 0);
+                    sleepWithTabCheck(1000).then(function() {
+                      log("Reset triggered", "step");
+                      resolve("reset");
                     });
-                    canvas.dispatchEvent(ev);
-                    logDebug(`Mouse ${type} op (${clampedX.toFixed(0)}, ${clampedY.toFixed(0)}) button=${button}`);
-                } catch (err) {
-                    logError('Mouse event fout: ' + err.message);
+                  }
+                  return;
                 }
+              }
             }
 
-            function dispatchKeyEvent(type, key, code='') {
-                try {
-                    const ev = new KeyboardEvent(type, {
-                        key: key,
-                        code: code || key,
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
+            if (foundBackToGame && confidence >= MIN_CONFIDENCE) {
+              if (justPressedEscape && isInDisconnectPhase) {
+                log("Found Back to Game but in disconnect phase - skipping", "warn");
+                resolve("none");
+                return;
+              }
+
+              log("Found Back to Game (conf " + confidence.toFixed(1) + "%)", "ok");
+              var btg = selectionState.backToGamePos;
+              if (btg) {
+                var pos2 = getPixelPos(btg);
+                if (pos2) {
+                  if (isChatOpen) {
+                    log("Closing chat", "debug");
+                    safePressKey("Escape", "Escape");
+                    sleepWithTabCheck(300).then(function() {
+                      closeChat();
+                      dispatchMouse("mousedown", pos2.x, pos2.y, 0);
+                      dispatchMouse("mouseup", pos2.x, pos2.y, 0);
+                      sleepWithTabCheck(500).then(function() {
+                        log("Fixing pointer lock...", "debug");
+                        safePressKey("t", "KeyT");
+                        sleepWithTabCheck(500).then(function() {
+                          safePressKey("Enter", "Enter");
+                          sleepWithTabCheck(500).then(function() {
+                            log("Back to Game handled", "ok");
+                            resolve("backtogame");
+                          });
+                        });
+                      });
                     });
-                    document.dispatchEvent(ev);
-                    logDebug(`Key ${type}: ${key}`);
-                } catch (err) {
-                    logError('Key event fout: ' + err.message);
+                  } else {
+                    dispatchMouse("mousedown", pos2.x, pos2.y, 0);
+                    dispatchMouse("mouseup", pos2.x, pos2.y, 0);
+                    sleepWithTabCheck(500).then(function() {
+                      log("Fixing pointer lock...", "debug");
+                      safePressKey("t", "KeyT");
+                      sleepWithTabCheck(500).then(function() {
+                        safePressKey("Enter", "Enter");
+                        sleepWithTabCheck(500).then(function() {
+                          log("Back to Game handled", "ok");
+                          resolve("backtogame");
+                        });
+                      });
+                    });
+                  }
+                  return;
                 }
+              }
             }
 
-            function getPixelPos(sel) {
-                if (!sel) return null;
-                const rect = overlay.getBoundingClientRect();
-                return {
-                    x: rect.left + (sel.x / 100) * rect.width,
-                    y: rect.top + (sel.y / 100) * rect.height
-                };
-            }
+            resolve("none");
+          });
+        });
+      });
+    });
+  }
 
-            async function typeString(text, delayBetween=50) {
-                for (const char of text) {
-                    if (botStopRequested) break;
-                    let code = 'Key' + char.toUpperCase();
-                    if (char === '/') code = 'Slash';
-                    else if (char === ' ') code = 'Space';
-                    else if (char === '.') code = 'Period';
-                    else if (char === '@') code = 'Digit2';
-                    else if (char === '#') code = 'Digit3';
-                    else if (char === '!') code = 'Digit1';
-                    else if (char === '?') code = 'Slash';
-                    
-                    dispatchKeyEvent('keydown', char, code);
-                    dispatchKeyEvent('keyup', char, code);
-                    await sleep(delayBetween);
-                }
-            }
+  function checkAndClickMultiplayer() {
+    return new Promise(function(resolve) {
+      log("Checking Singleplayer+Multiplayer...", "debug");
+      performOCR().then(function(result) {
+        var text = result.text || "";
+        var searchText = text.toLowerCase();
+        var hasSingleplayer = searchText.includes("singleplayer") || searchText.includes("single player");
+        var hasMultiplayer = searchText.includes("multiplayer") || searchText.includes("multi player");
 
-            function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-            // ---- BOT LOOP ----
-            async function botLoop() {
-                if (botRunning) return;
-                botRunning = true;
-                botStopRequested = false;
-                stopBotBtn.style.display = 'inline-block';
-                startBotBtn.disabled = true;
-                logSuccess(`🤖 Bot gestart (Tesseract OCR + Heavy Processing)`);
-                let cycleCount = 0;
-                let resetFromOCR = false;
-
-                justPressedEscape = false;
-                inDisconnectPhase = false;
-
-                while (!botStopRequested) {
-                    if (resetFromOCR) {
-                        logReset('🔄 Reset door OCR trigger, begin opnieuw vanaf stap 1');
-                        resetFromOCR = false;
-                        continue;
-                    }
-                    
-                    cycleCount++;
-                    ocrCheckCount = 0;
-                    log(`🔄 === CYCLE ${cycleCount} START ===`, 'debug');
-                    
-                    try {
-                        // === STAP 0: PRE-OCR CHECK ===
-                        const action0 = await doOCRCheck('Start cyclus');
-                        if (action0 === 'reset') { resetFromOCR = true; continue; }
-
-                        // === STAP 1: Dubbelklik op server list ===
-                        logStep('📍 STAP 1: Dubbelklik op server list');
-                        const action1 = await doOCRCheck('Voor dubbelklik');
-                        if (action1 === 'reset') { resetFromOCR = true; continue; }
-                        
-                        const sl = selectionState.serverListPos;
-                        if (sl) {
-                            const pos = getPixelPos(sl);
-                            if (pos) {
-                                log(`📡 Dubbelklik op server list (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                await sleep(200);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                            }
-                        } else {
-                            logError('❌ Server list positie niet ingesteld!');
-                            break;
-                        }
-                        
-                        const action2 = await doOCRCheck('Na dubbelklik');
-                        if (action2 === 'reset') { resetFromOCR = true; continue; }
-                        
-                        // === STAP 2: Wacht 10-15 seconden ===
-                        const wait1 = 10000 + Math.floor(Math.random() * 5000);
-                        logFarming(`⏳ Wacht ${(wait1/1000).toFixed(0)}s na dubbelklik...`);
-                        for (let i = 0; i < Math.floor(wait1 / 1000); i++) {
-                            if (botStopRequested) break;
-                            if (i % 5 === 0) {
-                                const actionW = await doOCRCheck(`Wacht ${i}s`);
-                                if (actionW === 'reset') { resetFromOCR = true; break; }
-                            }
-                            await sleep(1000);
-                        }
-                        if (resetFromOCR) continue;
-
-                        // === STAP 3: T indrukken ===
-                        logStep('📍 STAP 2: T indrukken');
-                        const action3 = await doOCRCheck('Voor T');
-                        if (action3 === 'reset') { resetFromOCR = true; continue; }
-                        dispatchKeyEvent('keydown', 't', 'KeyT');
-                        dispatchKeyEvent('keyup', 't', 'KeyT');
-                        log('⌨️ T ingedrukt');
-                        const action4 = await doOCRCheck('Na T');
-                        if (action4 === 'reset') { resetFromOCR = true; continue; }
-                        
-                        // === STAP 4: Wacht 5 seconden ===
-                        logFarming('⏳ Wacht 5s na T...');
-                        for (let i = 0; i < 5; i++) {
-                            if (botStopRequested) break;
-                            const actionW = await doOCRCheck(`Wacht ${i+1}/5s`);
-                            if (actionW === 'reset') { resetFromOCR = true; break; }
-                            await sleep(1000);
-                        }
-                        if (resetFromOCR) continue;
-
-                        // === STAP 5: Type /login + wachtwoord ===
-                        logStep('📍 STAP 3: Typen /login');
-                        const action5 = await doOCRCheck('Voor typen');
-                        if (action5 === 'reset') { resetFromOCR = true; continue; }
-                        const pass = passInput.value || '<pass>';
-                        const cmd = '/login ' + pass;
-                        log(`⌨️ Typen: ${cmd}`);
-                        await typeString(cmd, 30);
-                        await sleep(500);
-                        const action6 = await doOCRCheck('Na typen');
-                        if (action6 === 'reset') { resetFromOCR = true; continue; }
-
-                        // === STAP 6: Enter ===
-                        logStep('📍 STAP 4: Enter');
-                        const action7 = await doOCRCheck('Voor Enter');
-                        if (action7 === 'reset') { resetFromOCR = true; continue; }
-                        dispatchKeyEvent('keydown', 'Enter', 'Enter');
-                        dispatchKeyEvent('keyup', 'Enter', 'Enter');
-                        log('⏎ Enter');
-                        const action8 = await doOCRCheck('Na Enter');
-                        if (action8 === 'reset') { resetFromOCR = true; continue; }
-                        
-                        // === STAP 7: Wacht 30 seconden ===
-                        logFarming('⏳ Wacht 30s tot login...');
-                        for (let i = 0; i < 30; i++) {
-                            if (botStopRequested) break;
-                            if (i % 5 === 0) {
-                                const actionW = await doOCRCheck(`Login wacht ${i}s`);
-                                if (actionW === 'reset') { resetFromOCR = true; break; }
-                            }
-                            await sleep(1000);
-                        }
-                        if (resetFromOCR) continue;
-
-                        // === STAP 8: Rechtsklik op survival item ===
-                        logStep('📍 STAP 5: Rechtsklik op survival item');
-                        const action9 = await doOCRCheck('Voor rechtsklik');
-                        if (action9 === 'reset') { resetFromOCR = true; continue; }
-                        const si = selectionState.survivalItemPos;
-                        if (si) {
-                            const pos = getPixelPos(si);
-                            if (pos) {
-                                log(`🖱️ Rechtsklik op survival item (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 2);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 2);
-                                await sleep(300);
-                            }
-                        } else {
-                            logError('❌ Survival item positie niet ingesteld!');
-                            break;
-                        }
-                        const action10 = await doOCRCheck('Na rechtsklik');
-                        if (action10 === 'reset') { resetFromOCR = true; continue; }
-                        
-                        // === STAP 9: Wacht 5 seconden ===
-                        logFarming('⏳ Wacht 5s na rechtsklik...');
-                        for (let i = 0; i < 5; i++) {
-                            if (botStopRequested) break;
-                            const actionW = await doOCRCheck(`Wacht ${i+1}/5s na rechtsklik`);
-                            if (actionW === 'reset') { resetFromOCR = true; break; }
-                            await sleep(1000);
-                        }
-                        if (resetFromOCR) continue;
-                        
-                        // === STAP 10: Linksklik op survival item ===
-                        logStep('📍 STAP 6: Linksklik op survival item');
-                        const action11 = await doOCRCheck('Voor linksklik');
-                        if (action11 === 'reset') { resetFromOCR = true; continue; }
-                        if (si) {
-                            const pos = getPixelPos(si);
-                            if (pos) {
-                                log(`🖱️ Linksklik op survival item (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                await sleep(300);
-                            }
-                        }
-                        const action12 = await doOCRCheck('Na linksklik');
-                        if (action12 === 'reset') { resetFromOCR = true; continue; }
-                        
-                        // === STAP 11: FARMEN - 15 MINUTEN ===
-                        logStep('📍 STAP 7: FARMEN - 15 minuten');
-                        farmingProgress.classList.add('visible');
-                        
-                        for (let minute = 0; minute < 15; minute++) {
-                            if (botStopRequested) break;
-                            const remaining = 15 - minute;
-                            farmingProgress.textContent = `⏳ Farming ${minute+1}/15 min (${remaining} min rest)`;
-                            logFarming(`⏳ Farming minuut ${minute+1}/15...`);
-                            
-                            const actionF = await doOCRCheck(`Farming minuut ${minute+1}`);
-                            if (actionF === 'reset') { resetFromOCR = true; break; }
-                            
-                            for (let sec = 0; sec < 60; sec += 15) {
-                                if (botStopRequested) break;
-                                if (sec > 0) {
-                                    const actionFS = await doOCRCheck(`Farming ${minute+1}:${sec}s`);
-                                    if (actionFS === 'reset') { resetFromOCR = true; break; }
-                                }
-                                await sleep(15000);
-                            }
-                            if (resetFromOCR) break;
-                        }
-                        
-                        farmingProgress.classList.remove('visible');
-                        if (resetFromOCR) continue;
-                        
-                        logSuccess(`✅ Farming voltooid!`);
-                        const action13 = await doOCRCheck('Na farming');
-                        if (action13 === 'reset') { resetFromOCR = true; continue; }
-                        
-                        // === STAP 12: Escape ===
-                        logStep('📍 STAP 8: Escape');
-                        const action14 = await doOCRCheck('Voor Escape');
-                        if (action14 === 'reset') { resetFromOCR = true; continue; }
-                        
-                        justPressedEscape = true;
-                        inDisconnectPhase = true;
-                        
-                        dispatchKeyEvent('keydown', 'Escape', 'Escape');
-                        dispatchKeyEvent('keyup', 'Escape', 'Escape');
-                        log('⎋ Escape');
-                        await sleep(500);
-                        
-                        const action15 = await doOCRCheck('Na Escape');
-                        if (action15 === 'reset') { 
-                            resetFromOCR = true; 
-                            justPressedEscape = false;
-                            inDisconnectPhase = false;
-                            continue; 
-                        }
-                        
-                        // === STAP 13: Wacht 5 seconden ===
-                        logFarming('⏳ Wacht 5s na Escape...');
-                        for (let i = 0; i < 5; i++) {
-                            if (botStopRequested) break;
-                            const actionW = await doOCRCheck(`Wacht ${i+1}/5s na Escape`);
-                            if (actionW === 'reset') { 
-                                resetFromOCR = true; 
-                                justPressedEscape = false;
-                                inDisconnectPhase = false;
-                                break; 
-                            }
-                            await sleep(1000);
-                        }
-                        if (resetFromOCR) continue;
-                        
-                        // === STAP 14: Disconnect ===
-                        logStep('📍 STAP 9: Disconnect');
-                        const db = selectionState.disconnectBtnPos;
-                        if (db) {
-                            const pos = getPixelPos(db);
-                            if (pos) {
-                                log(`🔴 Disconnect op marker (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-                                dispatchMouseEvent('mousedown', pos.x, pos.y, 0);
-                                dispatchMouseEvent('mouseup', pos.x, pos.y, 0);
-                                await sleep(500);
-                            }
-                        } else {
-                            logError('❌ Disconnect knop positie niet ingesteld!');
-                            break;
-                        }
-                        
-                        justPressedEscape = false;
-                        inDisconnectPhase = false;
-                        
-                        // === STAP 15: Wacht 10 seconden ===
-                        logFarming('⏳ Wacht 10s voor volgende cyclus...');
-                        for (let i = 0; i < 10; i++) {
-                            if (botStopRequested) break;
-                            if (i % 3 === 0) {
-                                const actionW = await doOCRCheck(`Wacht ${i}s voor volgende cyclus`);
-                                if (actionW === 'reset') { resetFromOCR = true; break; }
-                            }
-                            await sleep(1000);
-                        }
-                        if (resetFromOCR) continue;
-
-                        logSuccess(`🔄 === CYCLE ${cycleCount} VOLTOOID, ga terug naar stap 1 ===`);
-                        
-                    } catch (err) {
-                        logError('Fout in bot loop: ' + err.message);
-                        logDebug('⏳ Wacht 5s voor herstart...');
-                        await sleep(5000);
-                    }
-                }
-
-                botRunning = false;
-                stopBotBtn.style.display = 'none';
-                startBotBtn.disabled = false;
-                farmingProgress.classList.remove('visible');
-                ocrStatus.classList.remove('visible');
-                justPressedEscape = false;
-                inDisconnectPhase = false;
-                logSuccess(`⏹ Bot gestopt na ${cycleCount} cycles`);
-            }
-
-            // ---- EVENT LISTENERS ----
-            startSelectieBtn.addEventListener('click', startSelection);
-
-            popupSelect.addEventListener('click', () => {
-                if (!isSelecting) return;
-                hidePopup();
-                waitingForClick = true;
-                setStatus(`👆 Klik op het scherm (stap ${currentStep})`);
-                overlay.classList.add('active');
-                logDebug(`Wachten op klik voor stap ${currentStep}`);
-            });
-
-            popupSkip.addEventListener('click', () => {
-                if (!isSelecting) return;
-                skipStep(currentStep);
-            });
-
-            popupCancel.addEventListener('click', () => {
-                if (!isSelecting) return;
-                hidePopup();
-                waitingForClick = false;
-                setStatus('❌ Selectie geannuleerd');
-                hideAllMarkers();
-                overlay.classList.remove('active');
-                startBotBtn.disabled = true;
-                log('❌ Selectie geannuleerd');
-            });
-
-            overlay.addEventListener('click', handleCanvasClick);
-            overlay.addEventListener('touchstart', (e) => {
-                const touch = e.touches[0];
-                if (!touch) return;
-                const me = new MouseEvent('click', {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY,
+        if (hasSingleplayer && hasMultiplayer) {
+          log("Found Singleplayer+Multiplayer - clicking Multiplayer", "ok");
+          var mp = selectionState.multiplayerPos;
+          if (mp) {
+            var pos = getPixelPos(mp);
+            if (pos) {
+              if (isChatOpen) {
+                log("Closing chat", "debug");
+                safePressKey("Escape", "Escape");
+                sleepWithTabCheck(300).then(function() {
+                  closeChat();
+                  dispatchMouse("mousedown", pos.x, pos.y, 0);
+                  dispatchMouse("mouseup", pos.x, pos.y, 0);
+                  sleepWithTabCheck(3000).then(function() {
+                    resolve(true);
+                  });
                 });
-                handleCanvasClick(me);
-            }, { passive: true });
-
-            toggleBtn.addEventListener('click', () => {
-                document.body.classList.toggle('ui-hidden');
-            });
-
-            startBotBtn.addEventListener('click', async () => {
-                if (!selectionState.completed) {
-                    logError('⚠️ Selecteer eerst alle stappen');
-                    return;
-                }
-                if (botRunning) return;
-                
-                if (!ocrReady) {
-                    logDebug('OCR initialiseren...');
-                    await initOCR();
-                }
-                
-                botLoop();
-            });
-
-            stopBotBtn.addEventListener('click', () => {
-                botStopRequested = true;
-                log('⏳ Stop aangevraagd...');
-            });
-
-            loadStorageBtn.addEventListener('click', () => {
-                if (loadPositions()) {
-                    loadStorageBtn.classList.remove('visible');
-                }
-            });
-
-            // ---- TEST OCR ----
-            function testOCR() {
-                logDebug('📖 Handmatige OCR test (heavy processing)...');
-                performOCR().then(result => {
-                    const text = result.text || '';
-                    const foundBackToServer = text.toLowerCase().includes('back to server list');
-                    const foundBackToGame = text.toLowerCase().includes('back to game') || 
-                                            text.toLowerCase().includes('back to the game') ||
-                                            text.toLowerCase().includes('resume game') ||
-                                            text.toLowerCase().includes('return to game');
-                    logSuccess(`OCR test: "${text.substring(0, 80)}..."`);
-                    logDebug(`BackToServer: ${foundBackToServer}, BackToGame: ${foundBackToGame}, conf: ${result.confidence.toFixed(1)}%`);
+              } else {
+                dispatchMouse("mousedown", pos.x, pos.y, 0);
+                dispatchMouse("mouseup", pos.x, pos.y, 0);
+                sleepWithTabCheck(3000).then(function() {
+                  resolve(true);
                 });
+              }
+              return;
             }
+          }
+        }
+        resolve(false);
+      });
+    });
+  }
 
-            // ---- INIT ----
-            checkCompletion();
-            log('🟢 BClient geladen - FINALE VERSIE');
-            log(`🎯 Min confidence: ${MIN_CONFIDENCE}%`);
-            log(`📍 5 markers: Server List | Back to Server List | Disconnect | Survival Item | Back to Game`);
-            log(`🔄 Prio 1: "back to server list" → klik oranje + reset naar stap 1`);
-            log(`🎮 Prio 2: "back to game" → klik cyaan (behalve tijdens disconnect fase)`);
-            log(`⚡ Heavy processing: alleen lichtste pixels (>180) blijven over`);
-            log(`💾 Posities worden automatisch opgeslagen in localStorage`);
-            log(`⏳ Pauze van 500ms voor en na elke OCR check`);
-            
-            // Check for saved positions
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved) {
-                loadStorageBtn.classList.add('visible');
-                loadStorageBtn.textContent = '💾 Laad opgeslagen posities';
-                logStorage('Opgeslagen posities gevonden! Klik op "Laad opgeslagen posities"');
-            }
-            
-            setStatus('🔹 Klik op "Start Selectie" of laad opgeslagen posities');
-            
-            setTimeout(() => {
-                initOCR();
-            }, 3000);
+  function startBot() {
+    if (botRunning) return;
+    botRunning = true;
+    botStopRequested = false;
+    dashStartBtn.disabled = true;
+    dashStopBtn.style.display = "inline-block";
+    setDashState("running");
+    setStatus("Bot running", "green");
+    log("Bot started", "ok");
 
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'o' || e.key === 'O') {
-                    logDebug('🔍 Handmatige OCR test...');
-                    testOCR();
-                }
-                if (e.key === 's' || e.key === 'S') {
-                    if (selectionState.completed) {
-                        savePositions();
-                        logStorage('Handmatig opgeslagen!');
-                    }
-                }
+    cycleCount = 0;
+    isChatOpen = false;
+    isTypingPassword = false;
+    isInDisconnectPhase = false;
+    justPressedEscape = false;
+    updateDashChat(false);
+
+    var resetFromOCR = false;
+
+    function runCycle() {
+      if (botStopRequested) {
+        finishBot();
+        return;
+      }
+
+      if (!isTabVisible) {
+        setStatus("Tab hidden - paused", "yellow");
+        setTimeout(function() {
+          if (!botStopRequested) {
+            runCycle();
+          } else {
+            finishBot();
+          }
+        }, 100);
+        return;
+      }
+
+      if (resetFromOCR) {
+        log("Reset triggered - restarting cycle", "step");
+        resetFromOCR = false;
+        setTimeout(runCycle, 300);
+        return;
+      }
+
+      cycleCount++;
+      updateDashCycle();
+      log("=== CYCLE " + cycleCount + " START ===", "step");
+      step0();
+    }
+
+    function step0() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      if (!isTabVisible) {
+        setStatus("Tab hidden - paused", "yellow");
+        setTimeout(function() {
+          if (!botStopRequested) {
+            step0();
+          } else {
+            finishBot();
+          }
+        }, 100);
+        return;
+      }
+
+      if (isChatOpen) {
+        log("Closing chat at cycle start", "debug");
+        safePressKey("Escape", "Escape");
+        sleepWithTabCheck(300).then(function() {
+          closeChat();
+          setTimeout(step0, 300);
+        });
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Pre-cycle").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+          setTimeout(function() {
+            log("Multiplayer check", "debug");
+            checkAndClickMultiplayer().then(function() {
+              setTimeout(step1, 300);
             });
-            logDebug('💡 Druk op "O" voor OCR test, "S" om posities op te slaan');
-            
-            setTimeout(() => {
-                const canvas = document.querySelector('#game_frame canvas');
-                if (canvas) {
-                    logDebug(`Canvas gevonden: ${canvas.width}x${canvas.height}`);
+          }, 300);
+        });
+      }, 300);
+    }
+
+    function step1() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        log("Step 1: Double click server list", "step");
+        doOCRCheck("Pre-server-click").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          var sl = selectionState.serverListPos;
+          if (sl) {
+            var pos = getPixelPos(sl);
+            if (pos) {
+              setTimeout(function() {
+                dispatchMouse("mousedown", pos.x, pos.y, 0);
+                dispatchMouse("mouseup", pos.x, pos.y, 0);
+                sleep(200).then(function() {
+                  dispatchMouse("mousedown", pos.x, pos.y, 0);
+                  dispatchMouse("mouseup", pos.x, pos.y, 0);
+                  setTimeout(step2, 300);
+                });
+              }, 300);
+            } else {
+              log("Server List missing", "err");
+              finishBot();
+            }
+          } else {
+            log("Server List missing", "err");
+            finishBot();
+          }
+        });
+      }, 300);
+    }
+
+    function step2() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Post-server-click").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          var waitTime = 10000 + Math.floor(Math.random() * 5000);
+          log("Waiting " + (waitTime / 1000).toFixed(0) + "s after double click", "debug");
+
+          var elapsed = 0;
+
+          function waitLoop() {
+            if (elapsed >= Math.floor(waitTime / 1000) || botStopRequested || resetFromOCR) {
+              if (resetFromOCR) {
+                setTimeout(runCycle, 300);
+              } else if (botStopRequested) {
+                finishBot();
+              } else {
+                setTimeout(step3, 300);
+              }
+              return;
+            }
+
+            if (!isTabVisible) {
+              setStatus("Tab hidden - paused", "yellow");
+              setTimeout(function() {
+                if (!botStopRequested) {
+                  waitLoop();
                 } else {
-                    logDebug('Canvas nog niet gevonden, wacht...');
+                  finishBot();
                 }
-            }, 5000);
-        })();
-    </script>
+              }, 100);
+              return;
+            }
 
+            if (elapsed % 5 === 0) {
+              doOCRCheck("Wait " + elapsed + "s").then(function(action) {
+                if (action === "reset") {
+                  resetFromOCR = true;
+                  setTimeout(runCycle, 300);
+                  return;
+                }
+                sleepWithTabCheck(1000).then(function() {
+                  elapsed++;
+                  setTimeout(waitLoop, 300);
+                });
+              });
+            } else {
+              sleepWithTabCheck(1000).then(function() {
+                elapsed++;
+                setTimeout(waitLoop, 300);
+              });
+            }
+          }
+          waitLoop();
+        });
+      }, 300);
+    }
+
+    function step3() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        log("Step 2: Opening chat (T)", "step");
+        doOCRCheck("Pre-T").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          openChat();
+          dispatchKey("keydown", "t", "KeyT");
+          dispatchKey("keyup", "t", "KeyT");
+          log("T pressed", "debug");
+          sleepWithTabCheck(800).then(function() {
+            setTimeout(step4, 300);
+          });
+        });
+      }, 300);
+    }
+
+    function step4() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Post-T").then(function(action) {
+          if (action === "reset") {
+            closeChat();
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          log("Waiting 5s after T", "debug");
+          var elapsed = 0;
+
+          function waitLoop() {
+            if (elapsed >= 5 || botStopRequested || resetFromOCR) {
+              if (resetFromOCR) {
+                setTimeout(runCycle, 300);
+              } else if (botStopRequested) {
+                finishBot();
+              } else {
+                setTimeout(step5, 300);
+              }
+              return;
+            }
+
+            if (!isTabVisible) {
+              setStatus("Tab hidden - paused", "yellow");
+              setTimeout(function() {
+                if (!botStopRequested) {
+                  waitLoop();
+                } else {
+                  finishBot();
+                }
+              }, 100);
+              return;
+            }
+
+            doOCRCheck("Wait " + (elapsed + 1) + "/5s").then(function(action) {
+              if (action === "reset") {
+                closeChat();
+                resetFromOCR = true;
+                setTimeout(runCycle, 300);
+                return;
+              }
+              sleepWithTabCheck(1000).then(function() {
+                elapsed++;
+                setTimeout(waitLoop, 300);
+              });
+            });
+          }
+          waitLoop();
+        });
+      }, 300);
+    }
+
+    function step5() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        log("Step 3: Typing /login", "step");
+        doOCRCheck("Pre-type").then(function(action) {
+          if (action === "reset") {
+            closeChat();
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          var pass = serverPassword || "<pass>";
+          var cmd = "/login " + pass;
+          log("Typing: " + cmd, "debug");
+
+          safeTypeString(cmd, 40).then(function() {
+            sleepWithTabCheck(500).then(function() {
+              setTimeout(step6, 300);
+            });
+          });
+        });
+      }, 300);
+    }
+
+    function step6() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Post-type").then(function(action) {
+          if (action === "reset") {
+            closeChat();
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          log("Step 4: Enter", "step");
+          setTimeout(step7, 300);
+        });
+      }, 300);
+    }
+
+    function step7() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Pre-enter").then(function(action) {
+          if (action === "reset") {
+            closeChat();
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          dispatchKey("keydown", "Enter", "Enter");
+          dispatchKey("keyup", "Enter", "Enter");
+          sleepWithTabCheck(500).then(function() {
+            closeChat();
+            setTimeout(step8, 300);
+          });
+        });
+      }, 300);
+    }
+
+    function step8() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Post-enter").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          log("Waiting 30s for login", "debug");
+          var elapsed = 0;
+
+          function waitLoop() {
+            if (elapsed >= 30 || botStopRequested || resetFromOCR) {
+              if (resetFromOCR) {
+                setTimeout(runCycle, 300);
+              } else if (botStopRequested) {
+                finishBot();
+              } else {
+                setTimeout(step9, 300);
+              }
+              return;
+            }
+
+            if (!isTabVisible) {
+              setStatus("Tab hidden - paused", "yellow");
+              setTimeout(function() {
+                if (!botStopRequested) {
+                  waitLoop();
+                } else {
+                  finishBot();
+                }
+              }, 100);
+              return;
+            }
+
+            if (elapsed % 5 === 0) {
+              doOCRCheck("Login wait " + elapsed + "s").then(function(action) {
+                if (action === "reset") {
+                  resetFromOCR = true;
+                  setTimeout(runCycle, 300);
+                  return;
+                }
+                sleepWithTabCheck(1000).then(function() {
+                  elapsed++;
+                  setTimeout(waitLoop, 300);
+                });
+              });
+            } else {
+              sleepWithTabCheck(1000).then(function() {
+                elapsed++;
+                setTimeout(waitLoop, 300);
+              });
+            }
+          }
+          waitLoop();
+        });
+      }, 300);
+    }
+
+    function step9() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        log("Step 5: Right click survival item", "step");
+        doOCRCheck("Pre-right-click").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          var si = selectionState.survivalItemPos;
+          if (si) {
+            var pos = getPixelPos(si);
+            if (pos) {
+              setTimeout(function() {
+                dispatchMouse("mousedown", pos.x, pos.y, 2);
+                dispatchMouse("mouseup", pos.x, pos.y, 2);
+                sleepWithTabCheck(300).then(function() {
+                  setTimeout(step10, 300);
+                });
+              }, 300);
+            } else {
+              log("Survival Item missing", "err");
+              finishBot();
+            }
+          } else {
+            log("Survival Item missing", "err");
+            finishBot();
+          }
+        });
+      }, 300);
+    }
+
+    function step10() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Post-right-click").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          log("Waiting 5s after right click", "debug");
+          var elapsed = 0;
+
+          function waitLoop() {
+            if (elapsed >= 5 || botStopRequested || resetFromOCR) {
+              if (resetFromOCR) {
+                setTimeout(runCycle, 300);
+              } else if (botStopRequested) {
+                finishBot();
+              } else {
+                setTimeout(step11, 300);
+              }
+              return;
+            }
+
+            if (!isTabVisible) {
+              setStatus("Tab hidden - paused", "yellow");
+              setTimeout(function() {
+                if (!botStopRequested) {
+                  waitLoop();
+                } else {
+                  finishBot();
+                }
+              }, 100);
+              return;
+            }
+
+            doOCRCheck("Wait " + (elapsed + 1) + "/5s").then(function(action) {
+              if (action === "reset") {
+                resetFromOCR = true;
+                setTimeout(runCycle, 300);
+                return;
+              }
+              sleepWithTabCheck(1000).then(function() {
+                elapsed++;
+                setTimeout(waitLoop, 300);
+              });
+            });
+          }
+          waitLoop();
+        });
+      }, 300);
+    }
+
+    function step11() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        log("Step 6: Left click survival item", "step");
+        doOCRCheck("Pre-left-click").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          var si = selectionState.survivalItemPos;
+          if (si) {
+            var pos = getPixelPos(si);
+            if (pos) {
+              setTimeout(function() {
+                dispatchMouse("mousedown", pos.x, pos.y, 0);
+                dispatchMouse("mouseup", pos.x, pos.y, 0);
+                sleepWithTabCheck(300).then(function() {
+                  setTimeout(step12, 300);
+                });
+              }, 300);
+            } else {
+              setTimeout(step12, 300);
+            }
+          } else {
+            setTimeout(step12, 300);
+          }
+        });
+      }, 300);
+    }
+
+    function step12() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Post-left-click").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          log("Step 7: Farming 15 minutes", "step");
+          setTimeout(function() {
+            farmLoop(0);
+          }, 300);
+        });
+      }, 300);
+    }
+
+    function farmLoop(minute) {
+      if (minute >= 15 || botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else if (botStopRequested) {
+          finishBot();
+        } else {
+          log("Farming complete", "ok");
+          setTimeout(step13, 300);
+        }
+        return;
+      }
+
+      if (!isTabVisible) {
+        setStatus("Tab hidden - paused", "yellow");
+        setTimeout(function() {
+          if (!botStopRequested) {
+            farmLoop(minute);
+          } else {
+            finishBot();
+          }
+        }, 100);
+        return;
+      }
+
+      log("Farming minute " + (minute + 1) + "/15", "debug");
+      doOCRCheck("Farming min " + (minute + 1)).then(function(action) {
+        if (action === "reset") {
+          resetFromOCR = true;
+          setTimeout(runCycle, 300);
+          return;
+        }
+
+        if (minute % 2 === 0 && minute > 0) {
+          checkAndClickMultiplayer().then(function() {
+            farmMinuteLoop(minute, 0);
+          });
+        } else {
+          farmMinuteLoop(minute, 0);
+        }
+      });
+    }
+
+    function farmMinuteLoop(minute, seconds) {
+      if (seconds >= 60 || botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else if (botStopRequested) {
+          finishBot();
+        } else {
+          setTimeout(function() {
+            farmLoop(minute + 1);
+          }, 300);
+        }
+        return;
+      }
+
+      if (!isTabVisible) {
+        setStatus("Tab hidden - paused", "yellow");
+        setTimeout(function() {
+          if (!botStopRequested) {
+            farmMinuteLoop(minute, seconds);
+          } else {
+            finishBot();
+          }
+        }, 100);
+        return;
+      }
+
+      if (seconds > 0) {
+        doOCRCheck("Farming " + (minute + 1) + ":" + seconds + "s").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+          sleepWithTabCheck(15000).then(function() {
+            setTimeout(function() {
+              farmMinuteLoop(minute, seconds + 15);
+            }, 300);
+          });
+        });
+      } else {
+        sleepWithTabCheck(15000).then(function() {
+          setTimeout(function() {
+            farmMinuteLoop(minute, seconds + 15);
+          }, 300);
+        });
+      }
+    }
+
+    function step13() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Post-farming").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          log("Step 8: Escape", "step");
+          setTimeout(step14, 300);
+        });
+      }, 300);
+    }
+
+    function step14() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Pre-escape").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          justPressedEscape = true;
+          isInDisconnectPhase = true;
+
+          if (isChatOpen) {
+            log("Closing chat before escape", "debug");
+            safePressKey("Escape", "Escape");
+            sleepWithTabCheck(300).then(function() {
+              closeChat();
+              setTimeout(function() {
+                dispatchKey("keydown", "Escape", "Escape");
+                dispatchKey("keyup", "Escape", "Escape");
+                sleepWithTabCheck(500).then(function() {
+                  setTimeout(step15, 300);
+                });
+              }, 300);
+            });
+          } else {
+            dispatchKey("keydown", "Escape", "Escape");
+            dispatchKey("keyup", "Escape", "Escape");
+            sleepWithTabCheck(500).then(function() {
+              setTimeout(step15, 300);
+            });
+          }
+        });
+      }, 300);
+    }
+
+    function step15() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        doOCRCheck("Post-escape").then(function(action) {
+          if (action === "reset") {
+            justPressedEscape = false;
+            isInDisconnectPhase = false;
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+
+          log("Waiting 5s after escape", "debug");
+          var elapsed = 0;
+
+          function waitLoop() {
+            if (elapsed >= 5 || botStopRequested || resetFromOCR) {
+              if (resetFromOCR) {
+                setTimeout(runCycle, 300);
+              } else if (botStopRequested) {
+                finishBot();
+              } else {
+                setTimeout(step16, 300);
+              }
+              return;
+            }
+
+            if (!isTabVisible) {
+              setStatus("Tab hidden - paused", "yellow");
+              setTimeout(function() {
+                if (!botStopRequested) {
+                  waitLoop();
+                } else {
+                  finishBot();
+                }
+              }, 100);
+              return;
+            }
+
+            doOCRCheck("Wait " + (elapsed + 1) + "/5s").then(function(action) {
+              if (action === "reset") {
+                justPressedEscape = false;
+                isInDisconnectPhase = false;
+                resetFromOCR = true;
+                setTimeout(runCycle, 300);
+                return;
+              }
+              sleepWithTabCheck(1000).then(function() {
+                elapsed++;
+                setTimeout(waitLoop, 300);
+              });
+            });
+          }
+          waitLoop();
+        });
+      }, 300);
+    }
+
+    function step16() {
+      if (botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else {
+          finishBot();
+        }
+        return;
+      }
+
+      setTimeout(function() {
+        log("Step 9: Disconnect", "step");
+        var db = selectionState.disconnectBtnPos;
+        if (db) {
+          var pos = getPixelPos(db);
+          if (pos) {
+            if (isChatOpen) {
+              log("Closing chat before disconnect", "debug");
+              safePressKey("Escape", "Escape");
+              sleepWithTabCheck(300).then(function() {
+                closeChat();
+                setTimeout(function() {
+                  dispatchMouse("mousedown", pos.x, pos.y, 0);
+                  dispatchMouse("mouseup", pos.x, pos.y, 0);
+                  sleepWithTabCheck(500).then(function() {
+                    justPressedEscape = false;
+                    isInDisconnectPhase = false;
+                    log("Waiting 10s before next cycle", "debug");
+                    waitAfterDisconnect(0);
+                  });
+                }, 300);
+              });
+            } else {
+              setTimeout(function() {
+                dispatchMouse("mousedown", pos.x, pos.y, 0);
+                dispatchMouse("mouseup", pos.x, pos.y, 0);
+                sleepWithTabCheck(500).then(function() {
+                  justPressedEscape = false;
+                  isInDisconnectPhase = false;
+                  log("Waiting 10s before next cycle", "debug");
+                  waitAfterDisconnect(0);
+                });
+              }, 300);
+            }
+          } else {
+            log("Disconnect missing", "err");
+            finishBot();
+          }
+        } else {
+          log("Disconnect missing", "err");
+          finishBot();
+        }
+      }, 300);
+    }
+
+    function waitAfterDisconnect(elapsed) {
+      if (elapsed >= 10 || botStopRequested || resetFromOCR) {
+        if (resetFromOCR) {
+          setTimeout(runCycle, 300);
+        } else if (botStopRequested) {
+          finishBot();
+        } else {
+          log("=== CYCLE " + cycleCount + " COMPLETE ===", "step");
+          setTimeout(runCycle, 300);
+        }
+        return;
+      }
+
+      if (!isTabVisible) {
+        setStatus("Tab hidden - paused", "yellow");
+        setTimeout(function() {
+          if (!botStopRequested) {
+            waitAfterDisconnect(elapsed);
+          } else {
+            finishBot();
+          }
+        }, 100);
+        return;
+      }
+
+      if (elapsed % 3 === 0) {
+        doOCRCheck("Wait " + elapsed + "s").then(function(action) {
+          if (action === "reset") {
+            resetFromOCR = true;
+            setTimeout(runCycle, 300);
+            return;
+          }
+          sleepWithTabCheck(1000).then(function() {
+            setTimeout(function() {
+              waitAfterDisconnect(elapsed + 1);
+            }, 300);
+          });
+        });
+      } else {
+        sleepWithTabCheck(1000).then(function() {
+          setTimeout(function() {
+            waitAfterDisconnect(elapsed + 1);
+          }, 300);
+        });
+      }
+    }
+
+    function finishBot() {
+      botRunning = false;
+      dashStartBtn.disabled = false;
+      dashStopBtn.style.display = "none";
+      setDashState("idle");
+      setStatus("Stopped", "grey");
+      log("Bot stopped", "warn");
+      isChatOpen = false;
+      isTypingPassword = false;
+      isInDisconnectPhase = false;
+      justPressedEscape = false;
+      updateDashChat(false);
+    }
+
+    runCycle();
+  }
+
+  log("BClient v2.0 loaded - 500ms delay between ALL actions", "info");
+  log("Use Start button to begin selection or Load saved positions", "info");
+  setStatus("Ready - select positions or load", "grey");
+
+  var savedPass = localStorage.getItem("bclient_password");
+  if (savedPass) {
+    serverPassword = savedPass;
+    log("Password loaded from storage", "info");
+  }
+
+  var saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    log("Saved positions found - click Load to restore", "info");
+  }
+
+  setTimeout(function() {
+    startSelection();
+  }, 1000);
+
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "1") {
+      startSelection();
+    }
+    if (e.key === "2") {
+      if (selectionState.completed) {
+        setTimeout(function() {
+          startBot();
+        }, 300);
+      }
+    }
+    if (e.key === "3") {
+      botStopRequested = true;
+      log("Stop requested (hotkey)", "warn");
+    }
+    if (e.key === "4") {
+      setTimeout(function() {
+        forcePointerLock();
+      }, 300);
+    }
+    if (e.key === "5") {
+      if (selectionState.completed) {
+        savePositions();
+        log("Manual save (hotkey)", "ok");
+      }
+    }
+    if (e.key === "6") {
+      setTimeout(function() {
+        if (loadPositions()) {
+          setStatus("Positions loaded", "green");
+        }
+      }, 300);
+    }
+  });
+
+  log("Hotkeys: 1=Select, 2=Start, 3=Stop, 4=Lock, 5=Save, 6=Load", "debug");
+
+})();
+</script>
 </body>
 </html>
