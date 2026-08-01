@@ -1850,7 +1850,7 @@
             return;
           }
 
-          log("Step 7: Farming 15 minutes", "step");
+          log("Step 7: Farming 60 minutes", "step");
           setTimeout(function() {
             farmLoop(0);
           }, 300);
@@ -1859,7 +1859,7 @@
     }
 
     function farmLoop(minute) {
-      if (minute >= 15 || botStopRequested || resetFromOCR) {
+      if (minute >= 60 || botStopRequested || resetFromOCR) {
         if (resetFromOCR) {
           setTimeout(runCycle, 300);
         } else if (botStopRequested) {
@@ -1883,7 +1883,7 @@
         return;
       }
 
-      log("Farming minute " + (minute + 1) + "/15", "debug");
+      log("Farming minute " + (minute + 1) + "/60", "debug");
       doOCRCheck("Farming min " + (minute + 1)).then(function(action) {
         if (action === "reset") {
           resetFromOCR = true;
